@@ -1,0 +1,23 @@
+# Configuration for logging format and settings
+
+# Define the logging format
+log_format: "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <level>{level: <4}</level> \
+<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+
+# Format for the current date and time
+time_format: "%Y%m%d%H%M%S"
+
+# Directory where log files are stored
+log_dir: "logs"
+
+# Logging level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
+level: "DEBUG"
+
+# Log rotation size (e.g., "500 MB", "1 GB")
+rotation: "500 MB"
+
+# Number of days a log file exists before it's deleted
+log_existence_days: 30
+
+# Extension for log files
+log_file_extension: ".log"
