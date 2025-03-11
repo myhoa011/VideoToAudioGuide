@@ -1,15 +1,17 @@
 """
-Initialize models and resources required for the application.
+Initialize and manage models.
 """
 
 import os
 from pathlib import Path
 from transformers import pipeline
 from google import genai
+
 from src.utils.logger import logger
+from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, VIDEO_PATH
 
 class Initializer:
-    """Manages the initialization and storage of models"""
+    """Initialize and manage models"""
     
     _instance = None
     _is_initialized = False
@@ -25,7 +27,7 @@ class Initializer:
             self.gemini_client = None
             Initializer._is_initialized = True
             
-    async def initialize(self):
+    async def initialize_models(self):
         """Initialize all models and resources"""
         try:
             logger.info("Starting model initialization...")
@@ -39,7 +41,7 @@ class Initializer:
             # Create output directories
             self._create_output_dirs()
             
-            logger.info("Model initialization completed successfully")
+            logger.info("Model initialization completed")
             
         except Exception as e:
             logger.error(f"Error initializing models: {str(e)}")
@@ -80,9 +82,10 @@ class Initializer:
         """Create necessary output directories"""
         try:
             dirs = [
-                os.getenv("OUTPUT_PATH"),
-                os.getenv("OUTPUT_PATH")+"frames/",
-                os.getenv("OUTPUT_PATH")+"audio/",
+                OUTPUT_PATH,
+                OUTPUT_FRAME_PATH,
+                OUTPUT_AUDIO_PATH,
+                VIDEO_PATH,
                 "logs/",
             ]
             
@@ -106,3 +109,13 @@ class Initializer:
         if not self.gemini_client:
             raise RuntimeError("Gemini client not initialized")
         return self.gemini_client
+
+# Singleton instance
+_instance = None
+
+def get_initializer():
+    """Get the Initializer instance"""
+    global _instance
+    if _instance is None:
+        _instance = Initializer()
+    return _instance

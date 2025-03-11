@@ -97,7 +97,7 @@ def _get_object_depths(depth_map: np.ndarray, objects) -> list:
         
         # Combine results and add ranks
         final_results = valid_results + invalid_results
-        for i, result in enumerate(final_results):
+        for i, result in enumerate(reversed(final_results)):
             result["distance_rank"] = i + 1
         
         return final_results

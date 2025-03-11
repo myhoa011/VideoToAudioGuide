@@ -1,25 +1,25 @@
+import os
 from pathlib import Path
+from datetime import datetime
 from fastapi import UploadFile
 import aiofiles
+
 from src.utils.logger import logger
-from src.helpers.video_helper import extract_frames, validate_extension, cleanup_file
+from src.helpers.video_helper import (
+    extract_frames,
+    validate_extension,
+    cleanup_file
+)
+
 
 class VideoHandler:
     """Handler for video processing operations"""
     
-    def __init__(self, output_path: str, time_interval: int = 1):
-        """
-        Initialize video handler
-        
-        Args:
-            output_path (str): Base directory for storing processed frames
-            allowed_extensions (set): Set of allowed video file extensions
-            time_interval (int): Time interval between frames in seconds
-        """
+    def __init__(self, output_path: str, time_interval):
         self.output_path = Path(output_path)
         self.time_interval = time_interval
-        
-    async def process_video(self, video_file: UploadFile) -> dict:
+
+    async def extract_frames(self, video_file: UploadFile) -> dict:
         """
         Process uploaded video file
         
@@ -47,7 +47,7 @@ class VideoHandler:
                 return {"error": "Failed to process video"}
             
             # Cleanup video file after successful processing
-            await cleanup_file(temp_path, )
+            await cleanup_file(str(temp_path))
                 
             return {
                 "status": "success",
@@ -60,4 +60,3 @@ class VideoHandler:
             if temp_path:
                 await cleanup_file(temp_path)
             return {"error": str(e)}
-            

@@ -1,45 +1,40 @@
 """
-Main FastAPI application entry point.
-This module initializes and configures the FastAPI application.
+Main entry point for FastAPI application.
 """
 
 import sys
+sys.path.append(".")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-sys.path.append(".")
 from src.utils.logger import logger
+from src.initializer import get_initializer
 from src.routers import video_router
-from src.initializer import Initializer
 
-# Khởi tạo model manager
-initializer = Initializer()
+# Get initializer
+initializer = get_initializer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan event to initialize and cleanup application resources"""
+    """Manage application lifecycle"""
     try:
         logger.info("Starting Video Analysis API")
-        
-        # Khởi tạo models và resources
-        await initializer.initialize()
-        app.state.depth_model = initializer.get_depth_model()
-        app.state.gemini_client = initializer.get_gemini_client()
-
-        yield  # Chạy ứng dụng trong khoảng thời gian này
-
+        await initializer.initialize_models()
+        yield
     finally:
         logger.info("Shutting down Video Analysis API")
 
+# Initialize FastAPI app
 app = FastAPI(
     title="Video Analysis API",
-    description="API for processing videos, detecting objects and estimating depth",
+    description="API for video processing, object detection and depth estimation",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-# CORS middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -51,22 +46,10 @@ app.add_middleware(
 # Include routers
 app.include_router(video_router.router)
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Simple health check endpoint"""
-    return {
-        "status": "healthy",
-        "models": {
-            "depth_model": initializer.depth_model is not None,
-            "gemini_client": initializer.gemini_client is not None
-        }
-    }
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "app:app",
+        "src.app:app",
         host="0.0.0.0",
         port=8000,
         reload=True

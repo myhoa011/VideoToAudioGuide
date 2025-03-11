@@ -1,7 +1,10 @@
 import cv2
 from datetime import timedelta, datetime
 from pathlib import Path
+import asyncio
+import os
 from src.utils.logger import logger
+from src.utils.constant import ALLOWED_EXTENSIONS
 
 def extract_frames(video_path, output_path, time_interval) -> list:
     """
@@ -32,13 +35,12 @@ def extract_frames(video_path, output_path, time_interval) -> list:
         # Get video information
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = total_frames / fps
 
         # Create a unique subfolder inside output_path for this video
         video_filename = Path(video_path).stem  # Get filename without extension
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Get timestamp
-        video_output_folder = Path(output_path) / f"{video_filename}_{timestamp}"
-        video_output_folder.mkdir(parents=True, exist_ok=True)  # Create folder if needed
+        frames_output_folder = Path(output_path) / f"{video_filename}_{timestamp}"
+        frames_output_folder.mkdir(parents=True, exist_ok=True)  # Create folder if needed
 
         # Calculate frame interval based on FPS and time interval
         frame_interval = int(fps * time_interval)
@@ -60,13 +62,13 @@ def extract_frames(video_path, output_path, time_interval) -> list:
 
                 # Create filename and save frame inside the subfolder
                 frame_filename = f"frame_{video_timestamp.replace(':', '_')}.jpg"
-                frame_path = video_output_folder / frame_filename
+                frame_path = frames_output_folder / frame_filename
                 cv2.imwrite(str(frame_path), processed_frame)
 
                 # Store frame information
                 frames_data.append({
                     'timestamp': video_timestamp,
-                    'frame_path': str(frame_path)
+                    'video_path': str(frame_path)
                 })
 
             frame_count += 1
@@ -123,7 +125,7 @@ def preprocess_frame(frame):
         print(f"Error preprocessing frame: {str(e)}")
         return frame 
 
-def validate_extension(video_path: str, allowed_extensions={'.mp4', '.avi', '.mov', '.mkv'}) -> bool:
+def validate_extension(video_path: str, allowed_extensions=ALLOWED_EXTENSIONS) -> bool:
     """
     Validate if the video file has an allowed extension.
     
@@ -136,8 +138,25 @@ def validate_extension(video_path: str, allowed_extensions={'.mp4', '.avi', '.mo
     """
     return Path(video_path).suffix.lower() in allowed_extensions
 
-import asyncio
-
+def cleanup_video(video_path: str) -> bool:
+    """
+    Delete video file if exists.
+    
+    Args:
+        video_path (str): Path to video file
+        
+    Returns:
+        bool: True if deleted or didn't exist, False if error
+    """
+    try:
+        if os.path.exists(video_path):
+            os.remove(video_path)
+            logger.info(f"Cleaned up video: {video_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error cleaning up video: {str(e)}")
+        return False
+    
 async def cleanup_file(file_path: str) -> bool:
     """
     Delete a file from the system.
