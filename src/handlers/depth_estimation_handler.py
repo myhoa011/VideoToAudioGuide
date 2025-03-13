@@ -1,22 +1,14 @@
-"""
-Handler for depth estimation functionality.
-"""
-
 from src.utils.logger import logger
 from src.helpers.depth_helper import predict
-from src.initializer import get_initializer
+from src.initializer import initializer
 
 class DepthEstimationHandler:
     """Handler for depth estimation of detected objects"""
     
-    def __init__(self, depth_model=None):
-        """
-        Initialize depth estimation handler
+    def __init__(self):
+        """Initialize depth estimation handler"""
         
-        Args:
-            depth_model: Optional pre-initialized depth model
-        """
-        self.depth_model = depth_model
+        self.depth_model = initializer.get_depth_model()
         
     def estimate_depths(self, objects: list, image_path: str) -> list:
         """
@@ -30,10 +22,6 @@ class DepthEstimationHandler:
             list: Objects with added depth information
         """
         try:
-            # Use provided model or get from initializer
-            if self.depth_model is None:
-                initializer = get_initializer()
-                self.depth_model = initializer.get_depth_model()
             
             # Use depth model to estimate depths
             results = predict(self.depth_model, objects, image_path)

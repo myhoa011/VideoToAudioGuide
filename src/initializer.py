@@ -1,14 +1,11 @@
-"""
-Initialize and manage models.
-"""
-
 import os
 from pathlib import Path
 from transformers import pipeline
 from google import genai
+import asyncio
 
 from src.utils.logger import logger
-from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, VIDEO_PATH
+from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, VIDEO_PATH, DEPTH_MODEL
 
 class Initializer:
     """Initialize and manage models"""
@@ -26,7 +23,7 @@ class Initializer:
             self.depth_model = None
             self.gemini_client = None
             Initializer._is_initialized = True
-            
+
     async def initialize_models(self):
         """Initialize all models and resources"""
         try:
@@ -50,7 +47,7 @@ class Initializer:
     async def _init_depth_model(self):
         """Initialize depth estimation model"""
         try:
-            model_name = os.getenv("DEPTH_MODEL", "depth-anything/Depth-Anything-V2-Small-hf")
+            model_name = DEPTH_MODEL
             logger.info(f"Loading depth model: {model_name}")
             
             self.depth_model = pipeline(
@@ -110,12 +107,5 @@ class Initializer:
             raise RuntimeError("Gemini client not initialized")
         return self.gemini_client
 
-# Singleton instance
-_instance = None
-
-def get_initializer():
-    """Get the Initializer instance"""
-    global _instance
-    if _instance is None:
-        _instance = Initializer()
-    return _instance
+initializer = Initializer()
+asyncio.run(initializer.initialize_models())

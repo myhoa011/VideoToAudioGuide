@@ -1,7 +1,3 @@
-"""
-Main entry point for FastAPI application.
-"""
-
 import sys
 sys.path.append(".")
 
@@ -10,18 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from src.utils.logger import logger
-from src.initializer import get_initializer
 from src.routers import video_router
-
-# Get initializer
-initializer = get_initializer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle"""
     try:
         logger.info("Starting Video Analysis API")
-        await initializer.initialize_models()
         yield
     finally:
         logger.info("Shutting down Video Analysis API")

@@ -1,31 +1,23 @@
-"""
-Handler for object detection functionality.
-"""
 
-from google import genai
 from google.genai import types
-from PIL import Image
-import asyncio
-import json
-import os
 
 from src.utils.logger import logger
 from src.helpers.gemini_helper import call_api
 from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTON, MODEL_NAME
-from src.initializer import get_initializer
+from src.initializer import initializer
 
 class ObjectDetectionHandler:
     """Handler for object detection using Gemini API"""
     
-    def __init__(self, gemini_client=None, model_name=MODEL_NAME):
+    def __init__(self, model_name=MODEL_NAME):
         """
         Initialize the handler
         
         Args:
-            gemini_client: Optional pre-initialized Gemini client
+            gemini_client: Gemini client
             model_name: Name of the model to use
         """
-        self.gemini_client = gemini_client
+        self.gemini_client = initializer.get_gemini_client()
         self.prompt = PROMPT_TEMPLATE
         self.model_name = model_name
         # Safety settings
@@ -48,11 +40,7 @@ class ObjectDetectionHandler:
         Returns:
             list: Detected objects with bounding boxes
         """
-        # Use provided client or get from initializer
-        if self.gemini_client is None:
-            initializer = get_initializer()
-            self.gemini_client = initializer.get_gemini_client()
-            
+
         return await call_api(
             self.gemini_client,
             self.prompt,
