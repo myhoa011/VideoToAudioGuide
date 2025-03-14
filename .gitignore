@@ -170,6 +170,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-audio/
-frames/
-video/
+logs/
+outputs/

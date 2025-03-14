@@ -1,15 +1,17 @@
 import sys
-sys.path.append(".")
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+
+sys.path.append(".")
 
 from src.utils.logger import logger
 from src.routers import video_router
 
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
     """Manage application lifecycle"""
     try:
         logger.info("Starting Video Analysis API")

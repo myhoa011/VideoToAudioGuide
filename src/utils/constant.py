@@ -10,8 +10,12 @@ TIME_INTERVAL = 1
 # Depth estimation model
 DEPTH_MODEL= "depth-anything/Depth-Anything-V2-Small-hf"
 
+#OpenAI TTS
+OPENAI_MODEL_NAME = "tts-1"
+OPENAI_TTS_VOICE = "alloy"
+
 # Gemini API
-MODEL_NAME = "gemini-2.0-flash"
+GEMINI_MODEL_NAME = "gemini-2.0-flash"
 CATEGORY = "HARM_CATEGORY_DANGEROUS_CONTENT"
 THRESHOLD = "BLOCK_ONLY_HIGH"
 

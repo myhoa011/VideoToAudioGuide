@@ -103,7 +103,7 @@ def convert_depth_to_distance_text(depth: float) -> str:
     elif depth > 0.3:  # Mild warning threshold
         return "quite close"
     else:  # No warning needed
-        return "quite far"
+        return "far away"
 
 
 def generate_direction_guidance(obj: dict) -> str:
@@ -126,21 +126,115 @@ def generate_direction_guidance(obj: dict) -> str:
     # Generate guidance based on position and distance
     if 'center' in position:
         if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} right in front of you, {distance_text} away."
+            return f"Warning! There is a {label} right in front of you, {distance_text}."
         else:
-            return f"There is a {label} in front of you, {distance_text} away."
+            return f"There is a {label} in front of you, {distance_text}."
             
     elif 'left' in position:
         if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} on the left, {distance_text} away."
+            return f"Warning! There is a {label} on the left, {distance_text}."
         else:
-            return f"There is a {label} on the left, {distance_text} away."
+            return f"There is a {label} on the left, {distance_text}."
             
     elif 'right' in position:
         if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} on the right, {distance_text} away."
+            return f"Warning! There is a {label} on the right, {distance_text}."
         else:
-            return f"There is a {label} on the right, {distance_text} away."
+            return f"There is a {label} on the right, {distance_text}."
     
     else:
-        return f"Detected a {label} at {position}, {distance_text} away."
+        return f"Detected a {label} at {position}, {distance_text}."
+
+
+def consolidate_navigation_guidance(objects_guidance: list) -> str:
+    """
+    Consolidate multiple object guidance into single coherent navigation text
+    
+    Args:
+        objects_guidance (list): List of guidance texts for individual objects
+        
+    Returns:
+        str: Consolidated navigation text
+    """
+    if not objects_guidance:
+        return "Path is clear. No obstacles detected."
+        
+    # Group similar messages to avoid redundancy
+    message_groups = {}
+    
+    for guidance in objects_guidance:
+        # Create a simplified key for grouping
+        # For example: "Warning! There is a person on the left, very close."
+        # Key would be: "person_left_very close"
+        
+        parts = guidance.lower().replace("warning! ", "").replace("there is a ", "").replace(".", "").split()
+        if len(parts) >= 4:
+            # Extract key elements: object type, position, distance
+            obj_type = parts[0]  # e.g., "person"
+            position = None
+            
+            # Be more precise about position detection
+            if "left" in guidance.lower():
+                position = "left"
+            elif "right" in guidance.lower():
+                position = "right"
+            elif "front" in guidance.lower() or "center" in guidance.lower():
+                position = "center"
+            else:
+                position = "unknown"
+                
+            # Extract distance info
+            distance = "close"
+            if "very close" in guidance.lower():
+                distance = "very close"
+            elif "quite close" in guidance.lower():
+                distance = "quite close"
+            elif "far away" in guidance.lower():
+                distance = "far away"
+            
+            # Create a key including position to prevent mixing different positions
+            key = f"{obj_type}_{position}_{distance}"
+            
+            if key in message_groups:
+                message_groups[key]["count"] += 1
+            else:
+                message_groups[key] = {
+                    "count": 1,
+                    "guidance": guidance,
+                    "is_warning": guidance.startswith("Warning!"),
+                    "distance_priority": 2 if "very close" in guidance else 1 if "quite close" in guidance else 0,
+                    "position": position
+                }
+    
+    # Sort by priority: warnings first, then by distance
+    sorted_messages = sorted(
+        message_groups.values(),
+        key=lambda x: (0 if x["is_warning"] else 1, -x["distance_priority"], -x["count"])
+    )
+    
+    # Generate consolidated text
+    consolidated_texts = []
+    
+    for msg in sorted_messages:
+        if msg["count"] > 1:
+            # Replace singular with plural form
+            guidance = msg["guidance"]
+            guidance = guidance.replace("There is a ", f"There are {msg['count']} ")
+            guidance = guidance.replace("Warning! There is a ", f"Warning! There are {msg['count']} ")
+            
+            # Handle plural forms of common objects
+            for singular, plural in [
+                ("person", "people"), 
+                ("child", "children"),
+                ("man", "men"),
+                ("woman", "women")
+            ]:
+                if f" {singular}" in guidance:
+                    guidance = guidance.replace(f" {singular}", f" {plural}")
+            
+            consolidated_texts.append(guidance)
+        else:
+            consolidated_texts.append(msg["guidance"])
+    
+    # Join with proper spacing and use commas correctly
+    return " ".join(consolidated_texts)

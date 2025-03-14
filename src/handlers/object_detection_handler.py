@@ -3,13 +3,13 @@ from google.genai import types
 
 from src.utils.logger import logger
 from src.helpers.gemini_helper import call_api
-from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTON, MODEL_NAME
+from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTON, GEMINI_MODEL_NAME
 from src.initializer import initializer
 
 class ObjectDetectionHandler:
     """Handler for object detection using Gemini API"""
     
-    def __init__(self, model_name=MODEL_NAME):
+    def __init__(self, model_name=GEMINI_MODEL_NAME):
         """
         Initialize the handler
         
