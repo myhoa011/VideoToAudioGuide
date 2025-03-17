@@ -1,6 +1,10 @@
-from src.utils.logger import logger
+from  typing import List
 
-def sort_objects_by_priority(objects: list) -> list:
+from src.utils.logger import logger
+from schemas import ObjectWithDepth
+from collections import defaultdict
+
+def sort_objects_by_priority(objects: List[ObjectWithDepth]) -> List[ObjectWithDepth]:
     """
     Sort objects list by priority using Priority Score method
     
@@ -17,10 +21,10 @@ def sort_objects_by_priority(objects: list) -> list:
     - TypeScore: priority score based on object type (0-1)
     
     Args:
-        objects (list): List of objects with depth information
+        objects (List[ObjectWithDepth]): List of objects with depth information
         
     Returns:
-        list: Sorted list of objects
+        List[ObjectWithDepth]: Sorted list of objects
     """
     try:
         # Define weights
@@ -29,55 +33,60 @@ def sort_objects_by_priority(objects: list) -> list:
         w3 = 0.1  # size weight
         w4 = 0.2  # type weight
         
-        def get_type_score(label: str) -> float:
+        def get_type_score(obj_type: str) -> float:
             """Calculate priority score based on object type"""
-            label = label.lower()
+            obj_type = obj_type.lower()
             
             # High risk - highest priority
-            if label in ['person', 'car', 'motorcycle', 'truck', 'bus']:
+            if obj_type in ['person', 'car', 'motorcycle', 'truck', 'bus']:
                 return 1.0
                 
             # Medium risk
-            if label in ['bicycle', 'dog', 'pothole', 'stairs']:
+            if obj_type in ['bicycle', 'dog', 'pothole', 'stairs']:
                 return 0.7
                 
             # Low risk
-            if label in ['traffic_light', 'stop_sign', 'door']:
+            if obj_type in ['traffic_light', 'stop_sign', 'door']:
                 return 0.4
                 
             # Static objects, minimal risk
-            if label in ['bench', 'wall', 'tree']:
+            if obj_type in ['bench', 'wall', 'tree']:
                 return 0.2
                 
             # Default for undefined objects
             return 0.1
         
-        def get_priority_score(obj):
-            # Get depth score (already 0-1)
-            depth_score = obj.get('depth')
-            
-            # Calculate position score
-            box = obj.get('box_2d', [0, 0, 0, 0])
-            x_center = (box[0] + box[2]) / 2  # object center x
-            frame_width = 1.0  # normalized width
-            frame_center = frame_width / 2
-            position_score = abs(x_center - frame_center) / frame_width
-            
-            # Calculate size score
-            box_width = box[2] - box[0]
-            box_height = box[3] - box[1]
-            area = box_width * box_height
-            total_area = 1.0  # normalized area
-            size_score = area / total_area
-            
-            # Calculate type score
-            type_score = get_type_score(obj.get('type'))
-            
-            # Calculate priority score
-            priority_score = (w1 * depth_score) + (w2 * (1 - position_score)) + \
-                           (w3 * size_score) + (w4 * type_score)
-            
-            return priority_score
+        def get_priority_score(obj: ObjectWithDepth) -> float:
+            try:
+                # Get depth score (already 0-1)
+                depth_score = obj.depth
+                
+                # Calculate position score
+                y_min, x_min, y_max, x_max = obj.box_2d
+                
+                # Calculate center point (by x)
+                x_center = (x_min + x_max) / 2
+                frame_width = 1000.0  # normalized width (0-1000)
+                frame_center = frame_width / 2
+                position_score = abs(x_center - frame_center) / frame_width
+                
+                # Calculate size score
+                width = x_max - x_min
+                height = y_max - y_min
+                size_score = (width * height) / (frame_width * frame_width)  # normalized by frame area
+                
+                # Calculate type score
+                type_score = get_type_score(obj.type)
+                
+                # Calculate priority score
+                priority_score = (w1 * depth_score) + (w2 * (1 - position_score)) + \
+                               (w3 * size_score) + (w4 * type_score)
+                
+                return priority_score
+                
+            except Exception as e:
+                logger.error(f"Error calculating priority score: {str(e)}")
+                return 0.0
         
         # Sort objects by priority score in descending order
         sorted_objects = sorted(objects, key=get_priority_score, reverse=True)
@@ -105,136 +114,108 @@ def convert_depth_to_distance_text(depth: float) -> str:
     else:  # No warning needed
         return "far away"
 
-
-def generate_direction_guidance(obj: dict) -> str:
+def generate_optimized_guidance(important_objects: List[ObjectWithDepth]) -> str:
     """
-    Generate movement guidance based on object information
+    Generate optimized guidance text by combining all objects into a single concise sentence
     
     Args:
-        obj (dict): Object information
+        important_objects (List[ObjectWithDepth]): List of priority objects
         
     Returns:
-        str: Movement guidance
+        str: Optimized guidance text as a single sentence
     """
-    label = obj.get('label')
-    position = obj.get('position')
-    depth = obj.get('depth')
+    if not important_objects:
+        return "No objects detected, the path ahead is clear."
+        
+    # Group objects by position and label
+    position_objects = defaultdict(lambda: defaultdict(int))
+    position_depth = defaultdict(lambda: defaultdict(list))
+    has_close_objects = False
     
-    # Convert depth to distance description
-    distance_text = convert_depth_to_distance_text(depth)
+    for obj in important_objects:
+        label = obj.label
+        position = obj.position
+        depth = obj.depth
+        
+        # Count objects by label at each position
+        position_objects[position][label] += 1
+        # Track depths for each object type at each position
+        position_depth[position][label].append(depth)
+        
+        # Check if we have close objects
+        if depth > 0.5:
+            has_close_objects = True
     
-    # Generate guidance based on position and distance
-    if 'center' in position:
-        if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} right in front of you, {distance_text}."
-        else:
-            return f"There is a {label} in front of you, {distance_text}."
+    # Start building the sentence
+    sentence_parts = []
+    
+    # Add warning prefix if needed
+    if has_close_objects:
+        sentence_parts.append("Warning!")
+    
+    # Process each position (center, left, right)
+    positions_text = []
+    
+    # Order of positions for natural language: center, left, right
+    for position in ['center', 'left', 'right']:
+        if position not in position_objects:
+            continue
             
-    elif 'left' in position:
-        if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} on the left, {distance_text}."
-        else:
-            return f"There is a {label} on the left, {distance_text}."
+        # Format objects at this position
+        object_texts = []
+        
+        for label, count in position_objects[position].items():
+            # Calculate average depth for this object type
+            avg_depth = sum(position_depth[position][label]) / len(position_depth[position][label])
+            distance = convert_depth_to_distance_text(avg_depth)
             
-    elif 'right' in position:
-        if depth > 0.5:  # Very close or fairly close
-            return f"Warning! There is a {label} on the right, {distance_text}."
+            # Format text based on count
+            if count == 1:
+                object_texts.append(f"a {label} ({distance})")
+            else:
+                object_texts.append(f"{count} {label}s ({distance})")
+        
+        # Format the position description
+        if position == 'center':
+            position_text = "directly ahead"
         else:
-            return f"There is a {label} on the right, {distance_text}."
+            position_text = f"to the {position}"
+            
+        # Combine objects at this position
+        if len(object_texts) == 1:
+            positions_text.append(f"{object_texts[0]} {position_text}")
+        else:
+            combined = ", ".join(object_texts[:-1]) + f" and {object_texts[-1]}"
+            positions_text.append(f"{combined} {position_text}")
     
+    # Combine all positions into one sentence
+    if len(positions_text) == 1:
+        sentence_parts.append(f"There is {positions_text[0]}.")
+    elif len(positions_text) == 2:
+        sentence_parts.append(f"There are {positions_text[0]} and {positions_text[1]}.")
     else:
-        return f"Detected a {label} at {position}, {distance_text}."
+        sentence_parts.append(f"There are {', '.join(positions_text[:-1])}, and {positions_text[-1]}.")
+    
+    return " ".join(sentence_parts)
 
-
-def consolidate_navigation_guidance(objects_guidance: list) -> str:
+def calculate_object_size(box_2d):
     """
-    Consolidate multiple object guidance into single coherent navigation text
+    Calculate object size from normalized coordinates
     
     Args:
-        objects_guidance (list): List of guidance texts for individual objects
-        
+        box_2d: Coordinates [y_min, x_min, y_max, x_max] normalized (0-1000)
+    
     Returns:
-        str: Consolidated navigation text
+        float: Relative area of the object (0-1)
     """
-    if not objects_guidance:
-        return "Path is clear. No obstacles detected."
-        
-    # Group similar messages to avoid redundancy
-    message_groups = {}
+    y_min, x_min, y_max, x_max = box_2d
     
-    for guidance in objects_guidance:
-        # Create a simplified key for grouping
-        # For example: "Warning! There is a person on the left, very close."
-        # Key would be: "person_left_very close"
-        
-        parts = guidance.lower().replace("warning! ", "").replace("there is a ", "").replace(".", "").split()
-        if len(parts) >= 4:
-            # Extract key elements: object type, position, distance
-            obj_type = parts[0]  # e.g., "person"
-            position = None
-            
-            # Be more precise about position detection
-            if "left" in guidance.lower():
-                position = "left"
-            elif "right" in guidance.lower():
-                position = "right"
-            elif "front" in guidance.lower() or "center" in guidance.lower():
-                position = "center"
-            else:
-                position = "unknown"
-                
-            # Extract distance info
-            distance = "close"
-            if "very close" in guidance.lower():
-                distance = "very close"
-            elif "quite close" in guidance.lower():
-                distance = "quite close"
-            elif "far away" in guidance.lower():
-                distance = "far away"
-            
-            # Create a key including position to prevent mixing different positions
-            key = f"{obj_type}_{position}_{distance}"
-            
-            if key in message_groups:
-                message_groups[key]["count"] += 1
-            else:
-                message_groups[key] = {
-                    "count": 1,
-                    "guidance": guidance,
-                    "is_warning": guidance.startswith("Warning!"),
-                    "distance_priority": 2 if "very close" in guidance else 1 if "quite close" in guidance else 0,
-                    "position": position
-                }
+    # Calculate width and height correctly based on [y_min, x_min, y_max, x_max] format
+    width = x_max - x_min  # Width = x_max - x_min
+    height = y_max - y_min  # Height = y_max - y_min
     
-    # Sort by priority: warnings first, then by distance
-    sorted_messages = sorted(
-        message_groups.values(),
-        key=lambda x: (0 if x["is_warning"] else 1, -x["distance_priority"], -x["count"])
-    )
+    # Calculate relative area (on 1000x1000 scale)
+    area = width * height
+    total_area = 1000 * 1000  # Total normalized area
     
-    # Generate consolidated text
-    consolidated_texts = []
-    
-    for msg in sorted_messages:
-        if msg["count"] > 1:
-            # Replace singular with plural form
-            guidance = msg["guidance"]
-            guidance = guidance.replace("There is a ", f"There are {msg['count']} ")
-            guidance = guidance.replace("Warning! There is a ", f"Warning! There are {msg['count']} ")
-            
-            # Handle plural forms of common objects
-            for singular, plural in [
-                ("person", "people"), 
-                ("child", "children"),
-                ("man", "men"),
-                ("woman", "women")
-            ]:
-                if f" {singular}" in guidance:
-                    guidance = guidance.replace(f" {singular}", f" {plural}")
-            
-            consolidated_texts.append(guidance)
-        else:
-            consolidated_texts.append(msg["guidance"])
-    
-    # Join with proper spacing and use commas correctly
-    return " ".join(consolidated_texts)
+    return area / total_area

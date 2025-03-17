@@ -1,10 +1,13 @@
 
 from google.genai import types
+from typing import List
 
 from src.utils.logger import logger
 from src.helpers.gemini_helper import call_api
 from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTON, GEMINI_MODEL_NAME
 from src.initializer import initializer
+from src.schemas.detection import DetectedObject
+
 
 class ObjectDetectionHandler:
     """Handler for object detection using Gemini API"""
@@ -30,7 +33,7 @@ class ObjectDetectionHandler:
         # System instructions
         self.system_instructions = SYSTEM_INSTRUCTON
         
-    async def detect_objects(self, image_path: str) -> list:
+    async def detect_objects(self, image_path: str) -> List[DetectedObject]:
         """
         Detect objects in an image using Gemini API
         

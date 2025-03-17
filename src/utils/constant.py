@@ -12,7 +12,7 @@ DEPTH_MODEL= "depth-anything/Depth-Anything-V2-Small-hf"
 
 #OpenAI TTS
 OPENAI_MODEL_NAME = "tts-1"
-OPENAI_TTS_VOICE = "alloy"
+OPENAI_TTS_VOICE = "ash"
 
 # Gemini API
 GEMINI_MODEL_NAME = "gemini-2.0-flash"
@@ -36,7 +36,7 @@ Ensure that:
 - 'position' describes the object's placement.
 - 'type' describes the broader classification of the object.
 
-Do not return Markdown, explanations, or extra text. Only output valid JSON."""
+Do not return Markdown, explanations, or extra text. Return ONLY the JSON."""
 
 
 ALLOWED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv'}

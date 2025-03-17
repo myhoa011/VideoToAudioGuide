@@ -1,6 +1,9 @@
+from typing import List
+
 from src.utils.logger import logger
 from src.helpers.depth_helper import predict
 from src.initializer import initializer
+from src.schemas.detection import DetectedObject
 
 class DepthEstimationHandler:
     """Handler for depth estimation of detected objects"""
@@ -10,7 +13,7 @@ class DepthEstimationHandler:
         
         self.depth_model = initializer.get_depth_model()
         
-    def estimate_depths(self, objects: list, image_path: str) -> list:
+    def estimate_depths(self, objects: List[DetectedObject], image_path: str) -> list:
         """
         Estimate depths for detected objects
         

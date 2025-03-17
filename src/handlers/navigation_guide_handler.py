@@ -1,7 +1,10 @@
+from typing import List
+
 from src.utils.logger import logger
+from schemas import NavigationGuide, ObjectWithDepth
 from src.helpers.navigation_helper import (
     sort_objects_by_priority,
-    generate_direction_guidance
+    generate_optimized_guidance
 )
 
 class NavigationGuideHandler:
@@ -28,21 +31,22 @@ class NavigationGuideHandler:
         else:
             return "None"
             
-    async def generate_navigation_guide(self, objects_with_depth: list) -> dict:
+    async def generate_navigation_guide(self, objects_with_depth: List[ObjectWithDepth]) -> NavigationGuide:
         """
         Generate navigation guidance using Priority Score method
         
         Args:
-            objects_with_depth (list): List of objects with depth information
-                [{'box_2d': [x1, y1, x2, y2], 'label': 'person', 'position': 'center',
-                  'type': 'person', 'depth': 0.17, 'distance_rank': 8}, ...]
-            
+            objects_with_depth (List[ObjectWithDepth]): List of objects with depth information
+                
         Returns:
-            dict: Navigation guidance information
+            NavigationGuide: Navigation guidance information
         """
         try:
             if not objects_with_depth:
-                return {"navigation_text": "No objects detected, the path ahead is clear."}
+                return NavigationGuide(
+                    navigation_text="No objects detected, the path ahead is clear.",
+                    priority_objects=[]
+                )
             
             # Sort objects by priority using Priority Score
             sorted_objects = sort_objects_by_priority(objects_with_depth)
@@ -50,26 +54,19 @@ class NavigationGuideHandler:
             # Get the most important objects (maximum 3)
             important_objects = sorted_objects[:3]
             
-            # Generate guidance for primary object using helper function
-            primary_guidance = generate_direction_guidance(important_objects[0])
+            # Generate optimized guidance text (one sentence)
+            navigation_text = generate_optimized_guidance(important_objects)
             
-            # Create comprehensive guidance text
-            navigation_text = primary_guidance
-            
-            # Add information about other objects if available
-            if len(important_objects) > 1:
-                additional_info = []
-                for obj in important_objects[1:]:
-                    additional_info.append(generate_direction_guidance(obj))
+            priority_objects_dict = [obj.model_dump() for obj in important_objects]
+
+            return NavigationGuide(
+                navigation_text=navigation_text,
+                priority_objects=priority_objects_dict
+            )
                 
-                if additional_info:
-                    navigation_text += ". " + ". ".join(additional_info)
-            
-            return {
-                "navigation_text": navigation_text,
-                "priority_objects": important_objects
-            }
-            
         except Exception as e:
             logger.error(f"Error generating navigation guidance: {str(e)}")
-            return {"navigation_text": "Unable to generate accurate guidance. Please move carefully."}
+            return NavigationGuide(
+                navigation_text="Unable to generate accurate guidance. Please move carefully.",
+                priority_objects=[]
+            )

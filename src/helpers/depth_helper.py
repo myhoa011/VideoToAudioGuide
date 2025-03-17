@@ -2,18 +2,22 @@ from transformers import pipeline
 from PIL import Image
 import numpy as np
 import json
+from typing import List
 from src.utils.logger import logger
+from src.schemas.detection import DetectedObject
+from src.schemas.depth import ObjectWithDepth
 
-def predict(depth_model, objects, image_path: str) -> list:
+def predict(depth_model, objects: List[DetectedObject], image_path: str) -> List[ObjectWithDepth]:
     """
     Estimate depth for detected objects
     
     Args:
-        objects (list): List of detected objects
+        depth_model: The depth estimation model
+        objects (List[DetectedObject]): List of detected objects
         image_path (str): Path to image file
         
     Returns:
-        list: Objects with depth information
+        List[ObjectWithDepth]: Objects with depth information
     """
     try:
         # Load and process image
@@ -29,26 +33,18 @@ def predict(depth_model, objects, image_path: str) -> list:
         logger.error(f"Error in depth estimation: {str(e)}")
         return []
 
-def _get_object_depths(depth_map: np.ndarray, objects) -> list:
+def _get_object_depths(depth_map: np.ndarray, objects: List[DetectedObject]) -> List[ObjectWithDepth]:
     """
     Calculate depth for each object using the depth map
     
     Args:
         depth_map (np.ndarray): Generated depth map
-        objects (list): List of detected objects
+        objects (List[DetectedObject]): List of detected objects
         
     Returns:
-        list: Objects with calculated depths
+        List[ObjectWithDepth]: Objects with calculated depths
     """
     try:
-        # Parse objects if string
-        if isinstance(objects, str):
-            try:
-                objects = json.loads(objects)
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse objects JSON: {str(e)}")
-                return []
-
         # Get depth map dimensions
         height, width = depth_map.shape
         
@@ -59,7 +55,7 @@ def _get_object_depths(depth_map: np.ndarray, objects) -> list:
         for obj in objects:
             try:
                 # Get coordinates
-                y1, x1, y2, x2 = obj["box_2d"]
+                y1, x1, y2, x2 = obj.box_2d
                 
                 # Convert to pixels
                 x1_pixel = int(x1 * width / 1000)
@@ -77,28 +73,41 @@ def _get_object_depths(depth_map: np.ndarray, objects) -> list:
                 depth_region = depth_map[y1_pixel:y2_pixel, x1_pixel:x2_pixel]
                 depth_mean = float(np.mean(depth_region))
                 
-                # Add depth to object
-                result = obj.copy()
-                result["depth"] = depth_mean
+                # Create ObjectWithDepth instance
+                result = ObjectWithDepth(
+                    box_2d=obj.box_2d,
+                    label=obj.label,
+                    position=obj.position,
+                    type=obj.type,
+                    depth=depth_mean,
+                    distance_rank=0  # Will be set after sorting
+                )
                 results.append(result)
                 
             except Exception as e:
-                logger.error(f"Error processing object {obj.get('label', 'unknown')}: {str(e)}")
-                result = obj.copy()
-                result["depth"] = np.nan
+                logger.error(f"Error processing object {obj.label}: {str(e)}")
+                # Create ObjectWithDepth with NaN depth
+                result = ObjectWithDepth(
+                    box_2d=obj.box_2d,
+                    label=obj.label,
+                    position=obj.position,
+                    type=obj.type,
+                    depth=float('nan'),
+                    distance_rank=0  # Will be set after sorting
+                )
                 results.append(result)
         
         # Sort by depth
-        valid_results = [r for r in results if not np.isnan(r["depth"])]
-        invalid_results = [r for r in results if np.isnan(r["depth"])]
+        valid_results = [r for r in results if not np.isnan(r.depth)]
+        invalid_results = [r for r in results if np.isnan(r.depth)]
         
         # Sort valid results by depth (nearest first)
-        valid_results.sort(key=lambda x: x["depth"])
+        valid_results.sort(key=lambda x: x.depth)
         
         # Combine results and add ranks
         final_results = valid_results + invalid_results
-        for i, result in enumerate(reversed(final_results)):
-            result["distance_rank"] = i + 1
+        for i, result in enumerate(final_results):
+            result.distance_rank = i + 1
         
         return final_results
         

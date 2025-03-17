@@ -5,24 +5,15 @@ import asyncio
 import os
 from src.utils.logger import logger
 from src.utils.constant import ALLOWED_EXTENSIONS
+from schemas import VideoFrame
 
 def extract_frames(video_path, output_path, time_interval) -> list:
     """
     Extract frames from the video at specified intervals and save them in 
     a subfolder named after the video filename and timestamp.
-
-    The method:
-    1. Opens the video file
-    2. Calculates frame extraction points based on FPS and interval
-    3. Extracts and preprocesses frames
-    4. Saves frames as JPG files inside a dedicated subfolder
-    5. Generates metadata for the extraction process
-
+    
     Returns:
         list: List of dictionaries containing frame information, or None if an error occurs.
-        Each dictionary contains:
-            - timestamp: Time position in the video
-            - frame_path: Path to the saved frame image
     """
     try:
         frames_data = []
@@ -66,10 +57,10 @@ def extract_frames(video_path, output_path, time_interval) -> list:
                 cv2.imwrite(str(frame_path), processed_frame)
 
                 # Store frame information
-                frames_data.append({
-                    'timestamp': video_timestamp,
-                    'video_path': str(frame_path)
-                })
+                frames_data.append(VideoFrame(
+                    timestamp=video_timestamp,
+                    video_path=str(frame_path)
+                ))
 
             frame_count += 1
 

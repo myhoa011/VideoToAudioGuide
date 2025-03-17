@@ -12,12 +12,16 @@ from src.helpers.video_helper import (
 )
 from src.handlers.object_detection_handler import ObjectDetectionHandler
 from src.handlers.depth_estimation_handler import DepthEstimationHandler
-from src.handlers.navigation_guide_handler import NavigationGuideHandler 
-from src.utils.constant import OUTPUT_FRAME_PATH   
+from src.handlers.navigation_guide_handler import NavigationGuideHandler
+from src.utils.constant import OUTPUT_FRAME_PATH
+from src.handlers.text_to_speech_handler import TextToSpeechHandler
+from src.schemas.navigation import NavigationGuide
+from schemas import ExecutionTime, FrameAnalysis, VideoAnalysisResponse, VideoProcessingResult
 
 object_detector = ObjectDetectionHandler()
 depth_estimator = DepthEstimationHandler()
-navigation_guide = NavigationGuideHandler() 
+navigation_guide = NavigationGuideHandler()
+tts_handler = TextToSpeechHandler()
 
 class VideoHandler:
     """Handler for video processing operations"""
@@ -26,7 +30,7 @@ class VideoHandler:
         self.output_path = Path(output_path)
         self.time_interval = time_interval
 
-    async def extract_frames(self, video_file: UploadFile) -> dict:
+    async def extract_frames(self, video_file: UploadFile) -> VideoProcessingResult:
         """
         Process uploaded video file
         
@@ -34,14 +38,14 @@ class VideoHandler:
             video_file (UploadFile): Uploaded video file
             
         Returns:
-            dict: Processing results including frame analysis
+            VideoProcessingResult: Processing results including frame analysis
         """
         temp_path = None
         try:
             # Validate file extension
             if not validate_extension(video_file.filename):
                 logger.error(f"Invalid file extension: {video_file.filename}")
-                return {"error": "Invalid file type"}
+                raise Exception("Invalid file type")
                 
             # Save uploaded file
             temp_path = self.output_path / video_file.filename
@@ -51,25 +55,29 @@ class VideoHandler:
             
             frames_data = extract_frames(temp_path, self.output_path, time_interval=self.time_interval)
             if not frames_data:
-                return {"error": "Failed to process video"}
+                raise Exception("Failed to process video")
             
             # Cleanup video file after successful processing
             await cleanup_file(str(temp_path))
                 
-            return {
-                "status": "success",
-                "frames": frames_data
-            }
+            result = VideoProcessingResult(
+                status="success",
+                video_path=str(temp_path),
+                total_frames=len(frames_data),
+                frames=frames_data
+            )
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error processing video: {str(e)}")
             # Try to cleanup even if processing failed
             if temp_path:
                 await cleanup_file(temp_path)
-            return {"error": str(e)}
+            raise Exception(str(e))
     
     @staticmethod
-    def get_video_folders():
+    def get_video_folders() -> dict:
         """Get list of video folders for enum"""
         frames_base_path = os.path.abspath(OUTPUT_FRAME_PATH)
         folders = {}
@@ -88,16 +96,16 @@ class VideoHandler:
             
         return folders
     
-    async def process_video(self, folder_name: str, num_frames: int):
+    async def process_video(self, folder_name: str, num_frames: int) -> VideoAnalysisResponse:
         """
-        Process frames from an existing folder
+        Process video from a folder containing frames
         
         Args:
-            folder_name (str): Name of the folder containing frames
-            num_frames (int): Number of frames to process
+            folder_name: Folder name containing frames
+            num_frames: Number of frames to process
             
         Returns:
-            dict: Processing results with objects, depth and navigation data
+            dict: Video analysis results
         """
         try:
             if folder_name == "no_videos_available":
@@ -107,73 +115,97 @@ class VideoHandler:
             
             if not os.path.exists(frames_folder):
                 return {"error": f"Folder '{folder_name}' not found"}
-
+    
             # Get total frames in folder
             frame_files = sorted([f for f in os.listdir(frames_folder) if f.startswith('frame_')])
             total_frames = len(frame_files)
             
-            frame_indices = list(range(min(num_frames, total_frames)))  
+            # Select frames to process
+            frame_indices = list(range(min(num_frames, total_frames)))
             
-            # Process selected frames
+            # Process each frame
             total_start_time = datetime.now()
             
-            results = []
+            frames_analysis = []
             for frame_idx in frame_indices:
                 frame_path = os.path.join(frames_folder, frame_files[frame_idx])
-                
-                frame_result = {
-                    "frame_index": frame_idx,
-                    "frame_path": frame_path,
-                    "objects": [],
-                    "navigation": None,
-                    "execution_times": {
-                        "object_detection": 0,
-                        "depth_estimation": 0,
-                        "navigation_generation": 0,
-                        "total": 0
-                    }
-                }
+
+                logger.info(f"Processing frame: {frame_files[frame_idx]} (index {frame_idx})")
                 
                 # Measure object detection time
                 obj_detection_start = datetime.now()
                 objects = await object_detector.detect_objects(frame_path)
                 obj_detection_time = (datetime.now() - obj_detection_start).total_seconds()
-                frame_result["execution_times"]["object_detection"] = obj_detection_time
+                
+                # Create ExecutionTime object
+                execution_time = ExecutionTime(
+                    object_detection=obj_detection_time
+                )
+                
+                objects_with_depth = []
+                navigation_guide_obj = None
+                audio_data = None
                 
                 if objects:
                     # Measure depth estimation time
                     depth_start = datetime.now()
-                    objects_with_depth = depth_estimator.estimate_depths(
-                        objects, 
-                        frame_path
-                    )
+                    objects_with_depth = depth_estimator.estimate_depths(objects, frame_path)
                     depth_time = (datetime.now() - depth_start).total_seconds()
-                    frame_result["execution_times"]["depth_estimation"] = depth_time
+                    execution_time.depth_estimation = depth_time
                     
                     # Measure navigation guidance generation time
                     navigation_start = datetime.now()
-                    navigation = await navigation_guide.generate_navigation_guide(objects_with_depth)
+                    navigation_guide_obj = await navigation_guide.generate_navigation_guide(objects_with_depth)
                     navigation_time = (datetime.now() - navigation_start).total_seconds()
-                    frame_result["execution_times"]["navigation_generation"] = navigation_time
+                    execution_time.navigation_generation = navigation_time
                     
-                    frame_result["objects"] = objects_with_depth
-                    frame_result["navigation"] = navigation
+                    # Perform text-to-speech
+                    tts_start = datetime.now()
+                    audio_data = await tts_handler.convert_text_to_speech(
+                        navigation_guide_obj.navigation_text,
+                        folder_name,
+                        str(frame_idx)
+                    )
+                    tts_time = (datetime.now() - tts_start).total_seconds()
+                    execution_time.text_to_speech = tts_time
+                else:
+                    # Create default NavigationGuide object if no objects detected
+                    navigation_guide_obj = NavigationGuide(
+                        navigation_text="No objects detected, the path ahead is clear.",
+                        priority_objects=[]
+                    )
                 
-                # Calculate total frame processing time
-                frame_result["execution_times"]["total"] = sum(frame_result["execution_times"].values())
+                # Calculate total processing time
+                execution_time.total = sum([
+                    execution_time.object_detection,
+                    execution_time.depth_estimation,
+                    execution_time.navigation_generation,
+                    execution_time.text_to_speech
+                ])
                 
-                results.append(frame_result)
-
+                # Create FrameAnalysis object
+                frame_analysis = FrameAnalysis(
+                    frame_index=str(frame_idx),
+                    frame_path=frame_path,
+                    objects=objects_with_depth,
+                    navigation=navigation_guide_obj.model_dump(),
+                    audio=audio_data.model_dump() if audio_data else None,
+                    execution_time=execution_time
+                )
+                
+                frames_analysis.append(frame_analysis)
+    
             total_execution_time = (datetime.now() - total_start_time).total_seconds()
-
-            return {
-                "frames_folder": frames_folder,
-                "total_frames": total_frames,
-                "processed_frames": len(results),
-                "execution_time": total_execution_time,
-                "results": results
-            }
-
+    
+            # Create VideoAnalysisResponse
+            response = VideoAnalysisResponse(
+                video_path=frames_folder,
+                total_frames=total_frames,
+                frames_analysis=frames_analysis
+            )
+            
+            return response
+    
         except Exception as e:
             logger.error(f"Error processing frames: {str(e)}")
             return {"error": str(e)}
