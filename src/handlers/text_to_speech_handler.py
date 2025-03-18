@@ -3,6 +3,7 @@ import os
 from src.utils.logger import logger
 from src.schemas.audio import AudioResponse
 from src.utils.constant import OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, OUTPUT_AUDIO_PATH
+from src.helpers.openai_tts_helper import call_api
 from src.initializer import initializer
 import wave
 import contextlib
@@ -40,14 +41,7 @@ class TextToSpeechHandler:
             
             logger.info(f"Converting text to speech for {folder_name}, frame {frame_index}")
             
-            with self.client.audio.speech.with_streaming_response.create(
-                model=self.model,
-                voice=self.voice,
-                input=text,
-                speed=1.0,
-                response_format='wav'
-            ) as response:
-                response.stream_to_file(str(output_path))
+            await call_api(self.client, output_path, self.model, self.voice, text)
             
             # Get audio duration if file exists
             duration = None
