@@ -41,6 +41,8 @@ A comprehensive API system for video processing, object detection, depth estimat
 ├── outputs/           # Output directory
 │   ├── frames/        # Extracted video frames
 │   └── audio/         # Generated audio files
+├── .env               # Environment variables (API keys, configurations)
+├── requirements.txt   # List of required dependencies for the project
 ```
 
 ## Setup
@@ -65,9 +67,23 @@ A comprehensive API system for video processing, object detection, depth estimat
     ```
 
 3. Install dependencies:
+
+    If you do not have a GPU or do not need CUDA:
     ```bash
     pip install -r requirements.txt
     ```
+
+    If you have a GPU and want to use CUDA, check your CUDA version first:
+    ```bash
+    nvcc --version
+    ```
+
+    Then install the compatible torch version from `https://pytorch.org/get-started/locally/`. For example, if using CUDA 12.6:
+    ```bash
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+    ```
+
+    Note: In this project, using CUDA does not significantly impact performance in most cases.
 
 4. Set up environment variables:
     ```bash

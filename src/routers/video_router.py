@@ -1,11 +1,11 @@
 import os
 from enum import Enum
 from fastapi import APIRouter, File, UploadFile, Form, Query, Response, status, HTTPException
-from typing import Optional
+from typing import List
 from src.handlers.video_handler import VideoHandler
 from src.utils.logger import logger
-from src.utils.constant import OUTPUT_FRAME_PATH, TIME_INTERVAL, OUTPUT_AUDIO_PATH
-from schemas import VideoAnalysisResponse, VideoProcessingResult
+from src.utils.constant import OUTPUT_FRAME_PATH, TIME_INTERVAL
+from schemas import VideoProcessingResult, AudioResponse
 
 # Initialize router
 router = APIRouter(
@@ -46,13 +46,13 @@ async def upload_video(
 
 @router.post(
     "/process",
-    description="Analyze video frames with object detection, depth estimation and navigation guidance",
-    response_model=VideoAnalysisResponse
+    description="Process video frames and return only audio guidance",
+    response_model=List[AudioResponse]
 )
 async def process_video(
     folder_name: VideoFolder = Query(..., description="Select a video folder"),
     num_frames: int = Form(..., description="Number of frames to process")
-) -> VideoAnalysisResponse:
+) -> List[AudioResponse]:
     try:
         # Get the string value from enum
         folder_name = folder_name.value

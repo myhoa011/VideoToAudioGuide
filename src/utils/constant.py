@@ -2,7 +2,6 @@
 OUTPUT_PATH = "outputs/"
 OUTPUT_FRAME_PATH = OUTPUT_PATH + "frames/"
 OUTPUT_AUDIO_PATH = OUTPUT_PATH + "audio/"
-VIDEO_PATH = OUTPUT_PATH + "videos/"
 
 # Video processing
 TIME_INTERVAL = 1

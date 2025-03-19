@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 import os
 from pathlib import Path
 from transformers import pipeline
@@ -6,7 +7,9 @@ import asyncio
 from openai import OpenAI
 
 from src.utils.logger import logger
-from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, VIDEO_PATH, DEPTH_MODEL
+from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, DEPTH_MODEL
+
+load_dotenv()
 
 class Initializer:
     """Initialize and manage models"""
@@ -103,7 +106,6 @@ class Initializer:
                 OUTPUT_PATH,
                 OUTPUT_FRAME_PATH,
                 OUTPUT_AUDIO_PATH,
-                VIDEO_PATH,
                 "logs/",
             ]
             

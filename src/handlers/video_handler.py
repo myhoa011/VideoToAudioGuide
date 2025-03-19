@@ -3,6 +3,8 @@ from fastapi import UploadFile
 import aiofiles
 import os
 from datetime import datetime
+from asyncio import gather, Semaphore
+from typing import List
 
 from src.utils.logger import logger
 from src.helpers.video_helper import (
@@ -16,7 +18,7 @@ from src.handlers.navigation_guide_handler import NavigationGuideHandler
 from src.utils.constant import OUTPUT_FRAME_PATH
 from src.handlers.text_to_speech_handler import TextToSpeechHandler
 from src.schemas.navigation import NavigationGuide
-from schemas import ExecutionTime, FrameAnalysis, VideoAnalysisResponse, VideoProcessingResult
+from schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse
 
 object_detector = ObjectDetectionHandler()
 depth_estimator = DepthEstimationHandler()
@@ -96,24 +98,104 @@ class VideoHandler:
             
         return folders
     
-    async def process_video(self, folder_name: str, num_frames: int) -> VideoAnalysisResponse:
+    async def process_frame(self, folder_name: str, frame_idx: int, frame_path: str) -> FrameAnalysis:
         """
-        Process video from a folder containing frames
+        Process a single frame asynchronously
+        
+        Args:
+            folder_name: Folder name containing frames
+            frame_idx: Index of the frame to process
+            frame_path: Path to the frame file
+            
+        Returns:
+            FrameAnalysis: Analysis results for the frame
+        """
+        logger.info(f"Processing frame: {os.path.basename(frame_path)} (index {frame_idx})")
+        
+        # Measure object detection time
+        obj_detection_start = datetime.now()
+        objects = await object_detector.detect_objects(frame_path)
+        obj_detection_time = (datetime.now() - obj_detection_start).total_seconds()
+        
+        # Create ExecutionTime object
+        execution_time = ExecutionTime(
+            object_detection=obj_detection_time
+        )
+        
+        objects_with_depth = []
+        navigation_guide_obj = None
+        audio_data = None
+        
+        if objects:
+            # Measure depth estimation time
+            depth_start = datetime.now()
+            objects_with_depth = depth_estimator.estimate_depths(objects, frame_path)
+            depth_time = (datetime.now() - depth_start).total_seconds()
+            execution_time.depth_estimation = depth_time
+            
+            # Measure navigation guidance generation time
+            navigation_start = datetime.now()
+            navigation_guide_obj = await navigation_guide.generate_navigation_guide(objects_with_depth)
+            navigation_time = (datetime.now() - navigation_start).total_seconds()
+            execution_time.navigation_generation = navigation_time
+            
+            # Perform text-to-speech
+            tts_start = datetime.now()
+            audio_data = await tts_handler.convert_text_to_speech(
+                navigation_guide_obj.navigation_text,
+                folder_name,
+                str(frame_idx)
+            )
+            tts_time = (datetime.now() - tts_start).total_seconds()
+            execution_time.text_to_speech = tts_time
+        else:
+            # Create default NavigationGuide object if no objects detected
+            navigation_guide_obj = NavigationGuide(
+                navigation_text="No objects detected, the path ahead is clear.",
+                priority_objects=[]
+            )
+        
+        # Calculate total processing time
+        execution_time.total = sum([
+            execution_time.object_detection,
+            execution_time.depth_estimation,
+            execution_time.navigation_generation,
+            execution_time.text_to_speech
+        ])
+        
+        # Create FrameAnalysis object
+        frame_analysis = FrameAnalysis(
+            frame_index=str(frame_idx),
+            frame_path=frame_path,
+            objects=objects_with_depth,
+            navigation=navigation_guide_obj.model_dump(),
+            audio=audio_data.model_dump(),
+            execution_time=execution_time
+        )
+        
+        return frame_analysis
+    
+    async def process_video(self, folder_name: str, num_frames: int) -> List[AudioResponse]:
+        """
+        Process video from a folder containing frames with parallel processing
+        but only return audio responses
         
         Args:
             folder_name: Folder name containing frames
             num_frames: Number of frames to process
             
         Returns:
-            dict: Video analysis results
+            List[AudioResponse]: List of audio responses for each processed frame
         """
         try:
             if folder_name == "no_videos_available":
+                logger.error("No videos available. Please upload a video first.")
                 return {"error": "No videos available. Please upload a video first."}
                 
             frames_folder = os.path.join(os.path.abspath(self.output_path), folder_name)
             
             if not os.path.exists(frames_folder):
+                logger.error(f"Folder '{folder_name}' not found")
                 return {"error": f"Folder '{folder_name}' not found"}
     
             # Get total frames in folder
@@ -123,88 +205,37 @@ class VideoHandler:
             # Select frames to process
             frame_indices = list(range(min(num_frames, total_frames)))
             
-            # Process each frame
+            # Process frames in parallel with concurrency control
             total_start_time = datetime.now()
             
-            frames_analysis = []
-            for frame_idx in frame_indices:
-                frame_path = os.path.join(frames_folder, frame_files[frame_idx])
-
-                logger.info(f"Processing frame: {frame_files[frame_idx]} (index {frame_idx})")
-                
-                # Measure object detection time
-                obj_detection_start = datetime.now()
-                objects = await object_detector.detect_objects(frame_path)
-                obj_detection_time = (datetime.now() - obj_detection_start).total_seconds()
-                
-                # Create ExecutionTime object
-                execution_time = ExecutionTime(
-                    object_detection=obj_detection_time
-                )
-                
-                objects_with_depth = []
-                navigation_guide_obj = None
-                audio_data = None
-                
-                if objects:
-                    # Measure depth estimation time
-                    depth_start = datetime.now()
-                    objects_with_depth = depth_estimator.estimate_depths(objects, frame_path)
-                    depth_time = (datetime.now() - depth_start).total_seconds()
-                    execution_time.depth_estimation = depth_time
-                    
-                    # Measure navigation guidance generation time
-                    navigation_start = datetime.now()
-                    navigation_guide_obj = await navigation_guide.generate_navigation_guide(objects_with_depth)
-                    navigation_time = (datetime.now() - navigation_start).total_seconds()
-                    execution_time.navigation_generation = navigation_time
-                    
-                    # Perform text-to-speech
-                    tts_start = datetime.now()
-                    audio_data = await tts_handler.convert_text_to_speech(
-                        navigation_guide_obj.navigation_text,
-                        folder_name,
-                        str(frame_idx)
-                    )
-                    tts_time = (datetime.now() - tts_start).total_seconds()
-                    execution_time.text_to_speech = tts_time
-                else:
-                    # Create default NavigationGuide object if no objects detected
-                    navigation_guide_obj = NavigationGuide(
-                        navigation_text="No objects detected, the path ahead is clear.",
-                        priority_objects=[]
-                    )
-                
-                # Calculate total processing time
-                execution_time.total = sum([
-                    execution_time.object_detection,
-                    execution_time.depth_estimation,
-                    execution_time.navigation_generation,
-                    execution_time.text_to_speech
-                ])
-                
-                # Create FrameAnalysis object
-                frame_analysis = FrameAnalysis(
-                    frame_index=str(frame_idx),
-                    frame_path=frame_path,
-                    objects=objects_with_depth,
-                    navigation=navigation_guide_obj.model_dump(),
-                    audio=audio_data.model_dump() if audio_data else None,
-                    execution_time=execution_time
-                )
-                
-                frames_analysis.append(frame_analysis)
-    
-            total_execution_time = (datetime.now() - total_start_time).total_seconds()
-    
-            # Create VideoAnalysisResponse
-            response = VideoAnalysisResponse(
-                video_path=frames_folder,
-                total_frames=total_frames,
-                frames_analysis=frames_analysis
-            )
+            # Limit concurrency to avoid overwhelming system resources
+            concurrency_limit = 5
+            semaphore = Semaphore(concurrency_limit)
             
-            return response
+            async def process_with_semaphore(idx):
+                async with semaphore:
+                    frame_path = os.path.join(frames_folder, frame_files[idx])
+                    # Process frame and get full analysis
+                    frame_analysis = await self.process_frame(folder_name, idx, frame_path)
+                    
+                    # Log the detailed analysis instead of returning it
+                    logger.info(f"Frame {idx} analysis: Objects detected: {len(frame_analysis.objects)}")
+                    logger.info(f"Frame {idx} navigation: {frame_analysis.navigation.navigation_text}")
+                    
+                    # Only return the audio data
+                    return frame_analysis.audio
+            
+            # Process frames in parallel
+            tasks = [process_with_semaphore(idx) for idx in frame_indices]
+            audio_responses = await gather(*tasks)
+            
+            total_execution_time = (datetime.now() - total_start_time).total_seconds()
+            logger.info(f"Total processing time: {total_execution_time:.2f} seconds")
+            
+            # Filter out None values (in case some frames didn't generate audio)
+            audio_responses = [audio for audio in audio_responses if audio is not None]
+            
+            return audio_responses
     
         except Exception as e:
             logger.error(f"Error processing frames: {str(e)}")
