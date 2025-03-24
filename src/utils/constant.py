@@ -2,6 +2,7 @@
 OUTPUT_PATH = "outputs/"
 OUTPUT_FRAME_PATH = OUTPUT_PATH + "frames/"
 OUTPUT_AUDIO_PATH = OUTPUT_PATH + "audio/"
+OUTPUT_REPORTS_PATH = OUTPUT_PATH + "reports/"
 
 # Video processing
 TIME_INTERVAL = 1
@@ -11,7 +12,7 @@ DEPTH_MODEL= "depth-anything/Depth-Anything-V2-Small-hf"
 
 #OpenAI TTS
 OPENAI_MODEL_NAME = "tts-1"
-OPENAI_TTS_VOICE = "ash"
+OPENAI_TTS_VOICE = "alloy"
 
 # Gemini API
 GEMINI_MODEL_NAME = "gemini-2.0-flash"
@@ -37,5 +38,8 @@ Ensure that:
 
 Do not return Markdown, explanations, or extra text. Return ONLY the JSON."""
 
+#Process video
 
 ALLOWED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv'}
+
+CONCURRENCY_LIMIT = 5

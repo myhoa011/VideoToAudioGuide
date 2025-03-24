@@ -7,7 +7,7 @@ import asyncio
 from openai import OpenAI
 
 from src.utils.logger import logger
-from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, DEPTH_MODEL
+from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, DEPTH_MODEL, OUTPUT_REPORTS_PATH
 
 load_dotenv()
 
@@ -106,6 +106,7 @@ class Initializer:
                 OUTPUT_PATH,
                 OUTPUT_FRAME_PATH,
                 OUTPUT_AUDIO_PATH,
+                OUTPUT_REPORTS_PATH,
                 "logs/",
             ]
             

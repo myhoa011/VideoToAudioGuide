@@ -44,9 +44,13 @@ async def call_api(gemini_client, prompt, system_instructions, safety_settings, 
 
         detected_objects: list[DetectedObject] = response.parsed
 
-        logger.info(f"Gemini API detected {len(detected_objects)} objects.")
-        return detected_objects
+        if detected_objects:
+            logger.info(f"Gemini API detected {len(detected_objects)} objects.")
+            return detected_objects
+        else:
+            logger.warning("Gemini API response parsed successfully but no objects detected")
+            return []
 
     except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}")
+        logger.error(f"Error calling Gemini API: {str(e)}")
         return []

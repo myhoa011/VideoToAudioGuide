@@ -51,7 +51,7 @@ async def upload_video(
 )
 async def process_video(
     folder_name: VideoFolder = Query(..., description="Select a video folder"),
-    num_frames: int = Form(..., description="Number of frames to process")
+    num_frames: int = Query(..., description="Number of frames to process")
 ) -> List[AudioResponse]:
     try:
         # Get the string value from enum

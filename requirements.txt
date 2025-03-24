@@ -11,6 +11,6 @@ openai==1.66.2
 asyncio==3.4.3
 loguru==0.7.3
 yacs==0.1.8
-torch
-torchvision
-torchaudio
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1

@@ -15,10 +15,11 @@ from src.helpers.video_helper import (
 from src.handlers.object_detection_handler import ObjectDetectionHandler
 from src.handlers.depth_estimation_handler import DepthEstimationHandler
 from src.handlers.navigation_guide_handler import NavigationGuideHandler
-from src.utils.constant import OUTPUT_FRAME_PATH
+from src.utils.constant import OUTPUT_FRAME_PATH, CONCURRENCY_LIMIT
 from src.handlers.text_to_speech_handler import TextToSpeechHandler
 from src.schemas.navigation import NavigationGuide
 from schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse
+from src.helpers.report_helper import save_execution_time_to_csv
 
 object_detector = ObjectDetectionHandler()
 depth_estimator = DepthEstimationHandler()
@@ -172,6 +173,8 @@ class VideoHandler:
             audio=audio_data.model_dump(),
             execution_time=execution_time
         )
+
+        logger.debug(f"Frame {frame_idx} execution time: {execution_time}")
         
         return frame_analysis
     
@@ -209,28 +212,53 @@ class VideoHandler:
             total_start_time = datetime.now()
             
             # Limit concurrency to avoid overwhelming system resources
-            concurrency_limit = 5
+            concurrency_limit = CONCURRENCY_LIMIT
             semaphore = Semaphore(concurrency_limit)
             
-            async def process_with_semaphore(idx):
-                async with semaphore:
-                    frame_path = os.path.join(frames_folder, frame_files[idx])
-                    # Process frame and get full analysis
-                    frame_analysis = await self.process_frame(folder_name, idx, frame_path)
-                    
-                    # Log the detailed analysis instead of returning it
-                    logger.info(f"Frame {idx} analysis: Objects detected: {len(frame_analysis.objects)}")
-                    logger.info(f"Frame {idx} navigation: {frame_analysis.navigation.navigation_text}")
-                    
-                    # Only return the audio data
-                    return frame_analysis.audio
+            # Collection for execution times
+            execution_times = []
             
+            async def process_with_semaphore(idx):
+                try:
+                    async with semaphore:
+                        frame_path = os.path.join(frames_folder, frame_files[idx])
+                        # Process frame and get full analysis
+                        frame_analysis = await self.process_frame(folder_name, idx, frame_path)
+                        
+                        if frame_analysis is None or frame_analysis.audio is None:
+                            logger.warning(f"Frame {idx} processing returned None")
+                            return None
+                            
+                        # Store execution time
+                        execution_times.append(frame_analysis.execution_time)
+                        
+                        # Log the detailed analysis
+                        logger.info(f"Frame {idx} analysis: Objects detected: {len(frame_analysis.objects)}")
+                        logger.info(f"Frame {idx} navigation: {frame_analysis.navigation.navigation_text}")
+                        
+                        return frame_analysis.audio
+                except Exception as e:
+                    logger.error(f"Error processing frame {idx}: {str(e)}")
+                    return None
+
             # Process frames in parallel
             tasks = [process_with_semaphore(idx) for idx in frame_indices]
             audio_responses = await gather(*tasks)
             
+            # Count successful vs failed frames
+            successful_frames = len([r for r in audio_responses if r is not None])
+            failed_frames = len(audio_responses) - successful_frames
+            logger.info(f"Processed {successful_frames} frames successfully, {failed_frames} frames failed")
+            
+            if successful_frames == 0:
+                raise Exception("All frames failed to process")
+
             total_execution_time = (datetime.now() - total_start_time).total_seconds()
             logger.info(f"Total processing time: {total_execution_time:.2f} seconds")
+            
+            # # Save execution time report
+            # report_path = save_execution_time_to_csv(execution_times, folder_name)
+            # logger.info(f"Execution time report saved to: {report_path}")
             
             # Filter out None values (in case some frames didn't generate audio)
             audio_responses = [audio for audio in audio_responses if audio is not None]
