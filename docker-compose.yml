@@ -1,0 +1,13 @@
+services:
+  video-analysis-api:
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+    env_file:
+      - .env
