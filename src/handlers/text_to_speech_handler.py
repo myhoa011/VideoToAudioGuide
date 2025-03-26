@@ -1,36 +1,65 @@
 from pathlib import Path
 import os
-from src.utils.logger import logger
-from src.schemas.audio import AudioResponse
-from src.utils.constant import OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, OUTPUT_AUDIO_PATH
-from src.helpers.openai_tts_helper import call_api
-from src.initializer import initializer
+
 import wave
 import contextlib
 
+from src.utils.logger import logger
+from src.schemas.audio import AudioResponse
+from src.utils.constant import (
+    OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, OUTPUT_AUDIO_PATH,
+    TTS_ENGINE_OPENAI, TTS_ENGINE_GTTS, TTS_ENGINE_KOKORO,
+    GTTS_LANGUAGE, KOKORO_VOICE, KOKORO_SPEED
+)
+from src.helpers.tts_helper import (
+    call_openai_api, call_gtts, call_kokoro
+)
+from src.initializer import initializer
+
+
 class TextToSpeechHandler:
-    """Handler for text-to-speech conversion"""
+    """Handler for text-to-speech conversion with multiple engine support"""
     
-    def __init__(self, output_path: str = OUTPUT_AUDIO_PATH):
+    def __init__(self, output_path: str = OUTPUT_AUDIO_PATH, engine: str = TTS_ENGINE_OPENAI):
+        self.engine = engine
         self.client = initializer.get_openai_client()
         self.model = OPENAI_MODEL_NAME
         self.voice = OPENAI_TTS_VOICE
+        self.gtts_language = GTTS_LANGUAGE
+        self.kokoro_voice = KOKORO_VOICE
+        self.kokoro_speed = KOKORO_SPEED
         self.base_output_path = Path(output_path)
         self.base_output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Get TTS engines from initializer
+        self.kokoro_pipeline = initializer.get_kokoro_pipeline()
+        self.aiogTTS_engine = initializer.get_aiogTTS_engine()
     
-    async def convert_text_to_speech(self, text: str, folder_name: str, frame_index: str) -> AudioResponse:
+    def set_engine(self, engine: str):
+        """Change TTS engine"""
+        if engine in [TTS_ENGINE_OPENAI, TTS_ENGINE_GTTS, TTS_ENGINE_KOKORO]:
+            self.engine = engine
+            logger.info(f"TTS engine changed to {engine}")
+        else:
+            logger.warning(f"Invalid TTS engine {engine}. Using default.")
+    
+    async def convert_text_to_speech(self, text: str, folder_name: str, frame_index: str, engine: str) -> AudioResponse:
         """
-        Convert text to speech using OpenAI API and save in folder structure like frames
+        Convert text to speech using selected engine and save in folder structure
         
         Args:
             text: Text to convert
             folder_name: Video folder name
             frame_index: Frame index
+            engine: Override default engine (optional)
             
         Returns:
             AudioResponse: Audio file information
         """
         try:
+            # Use provided engine or default
+            current_engine = engine if engine else self.engine
+            
             # Create a folder for this video's audio files
             video_audio_path = self.base_output_path / folder_name
             video_audio_path.mkdir(parents=True, exist_ok=True)
@@ -39,9 +68,25 @@ class TextToSpeechHandler:
             output_filename = f"audio_{frame_index}.wav"
             output_path = video_audio_path / output_filename
             
-            logger.info(f"Converting text to speech for {folder_name}, frame {frame_index}")
+            logger.info(f"Converting text to speech using {current_engine} for {folder_name}, frame {frame_index}")
             
-            await call_api(self.client, output_path, self.model, self.voice, text)
+            success = False
+            voice_used = ""
+            
+            # Call appropriate TTS API based on selected engine
+            if current_engine == TTS_ENGINE_OPENAI:
+                success = await call_openai_api(self.client, output_path, self.model, self.voice, text)
+                voice_used = self.voice
+            elif current_engine == TTS_ENGINE_GTTS:
+                success = await call_gtts(output_path, self.gtts_language, text, self.aiogTTS_engine)
+                voice_used = f"aiogTTS ({self.gtts_language})"
+            elif current_engine == TTS_ENGINE_KOKORO:
+                success = await call_kokoro(output_path, self.kokoro_voice, self.kokoro_speed, text, self.kokoro_pipeline)
+                voice_used = self.kokoro_voice
+            else:
+                logger.warning(f"Unknown engine {current_engine}, falling back to OpenAI")
+                success = await call_openai_api(self.client, output_path, self.model, self.voice, text)
+                voice_used = self.voice
             
             # Get audio duration if file exists
             duration = None
@@ -58,12 +103,20 @@ class TextToSpeechHandler:
                 audio_path=str(output_path),
                 text=text,
                 duration=duration,
-                voice=self.voice,
-                format='wav'
+                voice=voice_used,
+                format='wav',
+                engine=current_engine
             )
             
             return audio_response
                 
         except Exception as e:
             logger.error(f"Error converting text to speech: {str(e)}")
-            raise
+            # Return minimal response in case of error
+            return AudioResponse(
+                audio_path="",
+                text=text,
+                engine=engine if engine else self.engine,
+                voice="",
+                format="wav"
+            )

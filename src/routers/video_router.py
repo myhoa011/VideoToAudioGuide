@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, UploadFile, Form, Query, Response, status, 
 from typing import List
 from src.handlers.video_handler import VideoHandler
 from src.utils.logger import logger
-from src.utils.constant import OUTPUT_FRAME_PATH, TIME_INTERVAL
+from src.utils.constant import OUTPUT_FRAME_PATH, TIME_INTERVAL, TTS_ENGINES
 from schemas import VideoProcessingResult, AudioResponse
 
 # Initialize router
@@ -19,6 +19,8 @@ video_handler = VideoHandler(output_path=OUTPUT_FRAME_PATH, time_interval=TIME_I
 
 # Create VideoFolder enum dynamically
 VideoFolder = Enum('VideoFolder', video_handler.get_video_folders())
+Engine = [(engine, engine) for engine in TTS_ENGINES]
+TTSEngine = Enum('TTSEngine', Engine)
 
 @router.post(
     "/upload",
@@ -51,15 +53,24 @@ async def upload_video(
 )
 async def process_video(
     folder_name: VideoFolder = Query(..., description="Select a video folder"),
-    num_frames: int = Query(..., description="Number of frames to process")
+    num_frames: int = Query(..., description="Number of frames to process"),
+    tts_engine: TTSEngine = Query(..., description="Text-to-speech engine to use")
 ) -> List[AudioResponse]:
     try:
+        tts_engine = tts_engine.value
+        # Validate TTS engine
+        if tts_engine not in TTS_ENGINES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid TTS engine. Choose from: {', '.join(TTS_ENGINES)}"
+            )
+            
         # Get the string value from enum
         folder_name = folder_name.value
-        logger.info(f"Processing folder: {folder_name}")
+        logger.info(f"Processing folder: {folder_name} with TTS engine: {tts_engine}")
 
-        # Process video frames and generate analysis
-        result = await video_handler.process_video(folder_name, num_frames)
+        # Process video frames and generate analysis with specified TTS engine
+        result = await video_handler.process_video(folder_name, num_frames, tts_engine)
         
         # Check for error
         if isinstance(result, dict) and "error" in result:

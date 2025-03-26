@@ -1,6 +1,8 @@
-from loguru import logger
 import datetime
 import os
+import sys
+
+from loguru import logger
 
 from src.config import cfg
 
@@ -11,20 +13,79 @@ def create_logger():
     """Create logger object
     Returns: a logger object
     """
-    # Check if there is any logger handler running
-    if len(logger._core.handlers) < 2 or logger_cfg.log_dir not in logger._core.handlers[1]._name:
-        # Get the current date and time
-        current_time = datetime.datetime.now()
-        # Format the current date and time as a string
-        timestamp = current_time.strftime(logger_cfg.time_format)
-        os.makedirs(logger_cfg.log_dir, exist_ok=True)
-        # Construct log file name
-        filepath = os.path.join(logger_cfg.log_dir, f"{timestamp}{logger_cfg.log_file_extension}")
-        # Create logger file
-        logger.add(filepath, format=logger_cfg.log_format, level=logger_cfg.level, rotation=logger_cfg.rotation)
-        # delete old log files 
-        delete_old_logs(logger_cfg.log_dir)
-        print(f"Create log file at: {filepath}")
+    # Reset all handlers to ensure consistent configuration
+    logger.remove()
+    
+    # Define a different format for console with vertical bars and colors
+    console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <cyan>{name:>15}:{line:<3}</cyan> | <level>{level:>8}</level> | <level>{message}</level>"
+    
+    # Add console handler with custom format
+    logger.add(
+        sys.stderr,
+        format=console_format,
+        level=logger_cfg.level,
+        colorize=True
+    )
+    
+    # Get the current date and time
+    current_time = datetime.datetime.now()
+    # Format the current date and time as a string
+    timestamp = current_time.strftime(logger_cfg.time_format)
+    os.makedirs(logger_cfg.log_dir, exist_ok=True)
+    # Construct log file name
+    filepath = os.path.join(logger_cfg.log_dir, f"{timestamp}{logger_cfg.log_file_extension}")
+    # Create logger file with original format
+    logger.add(
+        filepath, 
+        format=logger_cfg.log_format,
+        level=logger_cfg.level, 
+        rotation=logger_cfg.rotation
+    )
+    # delete old log files 
+    delete_old_logs(logger_cfg.log_dir)
+    print(f"Create log file at: {filepath}")
+    return logger
+
+
+def reset_logger():
+    """Reset logger configuration after it may have been modified by external libraries
+    Returns: reconfigured logger object
+    """
+    # Reset all handlers
+    logger.remove()
+    
+    # Define a different format for console with vertical bars and colors
+    console_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <cyan>{name:>15}:{line:<3}</cyan> | <level>{level:>8}</level> | <level>{message}</level>"
+    
+    # Add console handler with custom format
+    logger.add(
+        sys.stderr,
+        format=console_format,
+        level=logger_cfg.level,
+        colorize=True
+    )
+    
+    # Add file handler if needed
+    for handler_id, handler in logger._core.handlers.items():
+        if hasattr(handler, '_name') and logger_cfg.log_dir in handler._name:
+            # File handler already exists
+            return logger
+    
+    # If no file handler exists, add one
+    # Get the current date and time
+    current_time = datetime.datetime.now()
+    # Format the current date and time as a string
+    timestamp = current_time.strftime(logger_cfg.time_format)
+    # Construct log file name
+    filepath = os.path.join(logger_cfg.log_dir, f"{timestamp}{logger_cfg.log_file_extension}")
+    # Create logger file with original format
+    logger.add(
+        filepath, 
+        format=logger_cfg.log_format,
+        level=logger_cfg.level, 
+        rotation=logger_cfg.rotation
+    )
+    print(f"Logger reset and reconfigured. Log file at: {filepath}")
     return logger
 
 
@@ -46,4 +107,5 @@ def delete_old_logs(log_dir):
             except ValueError:
                 continue
 
-logger = create_logger()  
+# Create and configure the logger
+logger = create_logger()

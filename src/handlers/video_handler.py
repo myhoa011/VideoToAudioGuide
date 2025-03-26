@@ -99,7 +99,7 @@ class VideoHandler:
             
         return folders
     
-    async def process_frame(self, folder_name: str, frame_idx: int, frame_path: str) -> FrameAnalysis:
+    async def process_frame(self, folder_name: str, frame_idx: int, frame_path: str, tts_engine: str) -> FrameAnalysis:
         """
         Process a single frame asynchronously
         
@@ -145,7 +145,8 @@ class VideoHandler:
             audio_data = await tts_handler.convert_text_to_speech(
                 navigation_guide_obj.navigation_text,
                 folder_name,
-                str(frame_idx)
+                str(frame_idx),
+                tts_engine
             )
             tts_time = (datetime.now() - tts_start).total_seconds()
             execution_time.text_to_speech = tts_time
@@ -178,7 +179,7 @@ class VideoHandler:
         
         return frame_analysis
     
-    async def process_video(self, folder_name: str, num_frames: int) -> List[AudioResponse]:
+    async def process_video(self, folder_name: str, num_frames: int, tts_engine: str) -> List[AudioResponse]:
         """
         Process video from a folder containing frames with parallel processing
         but only return audio responses
@@ -186,6 +187,7 @@ class VideoHandler:
         Args:
             folder_name: Folder name containing frames
             num_frames: Number of frames to process
+            tts_engine: Text-to-speech engine to use
             
         Returns:
             List[AudioResponse]: List of audio responses for each processed frame
@@ -223,7 +225,7 @@ class VideoHandler:
                     async with semaphore:
                         frame_path = os.path.join(frames_folder, frame_files[idx])
                         # Process frame and get full analysis
-                        frame_analysis = await self.process_frame(folder_name, idx, frame_path)
+                        frame_analysis = await self.process_frame(folder_name, idx, frame_path, tts_engine)
                         
                         if frame_analysis is None or frame_analysis.audio is None:
                             logger.warning(f"Frame {idx} processing returned None")

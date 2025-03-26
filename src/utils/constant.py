@@ -10,9 +10,24 @@ TIME_INTERVAL = 1
 # Depth estimation model
 DEPTH_MODEL= "depth-anything/Depth-Anything-V2-Small-hf"
 
-#OpenAI TTS
+# Text-to-Speech Constants
+TTS_ENGINE_OPENAI = "openai"
+TTS_ENGINE_GTTS = "gtts"
+TTS_ENGINE_KOKORO = "kokoro"
+
+TTS_ENGINES = [TTS_ENGINE_OPENAI, TTS_ENGINE_GTTS, TTS_ENGINE_KOKORO]
+
+# OpenAI TTS
 OPENAI_MODEL_NAME = "tts-1"
 OPENAI_TTS_VOICE = "alloy"
+
+# gTTS settings
+GTTS_LANGUAGE = "en"
+
+# Kokoro settings
+KOKORO_VOICE = "af_heart"
+KOKORO_SPEED = 1.0
+KOKORO_REPO_ID = "hexgrad/Kokoro-82M"
 
 # Gemini API
 GEMINI_MODEL_NAME = "gemini-2.0-flash"

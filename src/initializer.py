@@ -1,14 +1,21 @@
-from dotenv import load_dotenv
 import os
+import asyncio
 from pathlib import Path
+
+from dotenv import load_dotenv
 from transformers import pipeline
 from google import genai
-import asyncio
 from openai import OpenAI
+from aiogtts import aiogTTS
+import kokoro
 
-from src.utils.logger import logger
-from src.utils.constant import OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, DEPTH_MODEL, OUTPUT_REPORTS_PATH
-
+from src.utils.logger import reset_logger, logger
+from src.utils.constant import (
+    OUTPUT_PATH, OUTPUT_FRAME_PATH, OUTPUT_AUDIO_PATH, 
+    DEPTH_MODEL, OUTPUT_REPORTS_PATH,
+    KOKORO_REPO_ID
+)
+reset_logger()
 load_dotenv()
 
 class Initializer:
@@ -27,6 +34,8 @@ class Initializer:
             self.depth_model = None
             self.gemini_client = None
             self.openai_client = None
+            self.kokoro_pipeline = None
+            self.aiogTTS_engine = None
             Initializer._is_initialized = True
 
     async def initialize_models(self):
@@ -42,6 +51,9 @@ class Initializer:
             
             # Initialize OpenAI client
             await self._init_openai_client()
+            
+            # Initialize TTS engines
+            await self._init_tts_engines()
             
             # Create output directories
             self._create_output_dirs()
@@ -98,6 +110,32 @@ class Initializer:
         except Exception as e:
             logger.error(f"Error initializing OpenAI client: {str(e)}")
             raise
+
+    async def _init_tts_engines(self):
+        """Initialize Text-to-Speech engines"""
+        try:
+            # Initialize Kokoro TTS
+            try:
+                logger.info("Initializing Kokoro TTS engine")
+                self.kokoro_pipeline = kokoro.KPipeline(lang_code='a', repo_id=KOKORO_REPO_ID)  # 'a' for American English
+                
+                logger.info("Kokoro TTS engine initialized successfully")
+            except Exception as e:
+                logger.warning(f"Error initializing Kokoro TTS engine: {str(e)}")
+                self.kokoro_pipeline = None
+            
+            # Initialize aiogTTS
+            try:
+                logger.info("Initializing aiogTTS engine")
+                self.aiogTTS_engine = aiogTTS()
+                logger.info("aiogTTS engine initialized successfully")
+            except Exception as e:
+                logger.warning(f"Error initializing aiogTTS engine: {str(e)}")
+                self.aiogTTS_engine = None
+                
+        except Exception as e:
+            logger.error(f"Error initializing TTS engines: {str(e)}")
+            # Don't raise exception here - TTS engines are optional
             
     def _create_output_dirs(self):
         """Create necessary output directories"""
@@ -136,6 +174,14 @@ class Initializer:
         if not self.openai_client:
             raise RuntimeError("OpenAI client not initialized")
         return self.openai_client
+    
+    def get_kokoro_pipeline(self):
+        """Get instance of Kokoro pipeline"""
+        return self.kokoro_pipeline
+    
+    def get_aiogTTS_engine(self):
+        """Get instance of aiogTTS engine"""
+        return self.aiogTTS_engine
 
 initializer = Initializer()
 asyncio.run(initializer.initialize_models())
