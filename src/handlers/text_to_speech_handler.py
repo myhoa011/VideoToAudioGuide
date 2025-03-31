@@ -20,14 +20,9 @@ from src.initializer import initializer
 class TextToSpeechHandler:
     """Handler for text-to-speech conversion with multiple engine support"""
     
-    def __init__(self, output_path: str = OUTPUT_AUDIO_PATH, engine: str = TTS_ENGINE_OPENAI):
+    def __init__(self, output_path: str = OUTPUT_AUDIO_PATH, engine: str = TTS_ENGINE_KOKORO):
         self.engine = engine
         self.client = initializer.get_openai_client()
-        self.model = OPENAI_MODEL_NAME
-        self.voice = OPENAI_TTS_VOICE
-        self.gtts_language = GTTS_LANGUAGE
-        self.kokoro_voice = KOKORO_VOICE
-        self.kokoro_speed = KOKORO_SPEED
         self.base_output_path = Path(output_path)
         self.base_output_path.mkdir(parents=True, exist_ok=True)
         
@@ -75,18 +70,18 @@ class TextToSpeechHandler:
             
             # Call appropriate TTS API based on selected engine
             if current_engine == TTS_ENGINE_OPENAI:
-                success = await call_openai_api(self.client, output_path, self.model, self.voice, text)
-                voice_used = self.voice
+                success = await call_openai_api(self.client, output_path, OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, text)
+                voice_used = OPENAI_TTS_VOICE
             elif current_engine == TTS_ENGINE_GTTS:
-                success = await call_gtts(output_path, self.gtts_language, text, self.aiogTTS_engine)
-                voice_used = f"aiogTTS ({self.gtts_language})"
+                success = await call_gtts(output_path, GTTS_LANGUAGE, text, self.aiogTTS_engine)
+                voice_used = f"aiogTTS ({GTTS_LANGUAGE})"
             elif current_engine == TTS_ENGINE_KOKORO:
-                success = await call_kokoro(output_path, self.kokoro_voice, self.kokoro_speed, text, self.kokoro_pipeline)
-                voice_used = self.kokoro_voice
+                success = await call_kokoro(output_path, KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
+                voice_used = KOKORO_VOICE
             else:
-                logger.warning(f"Unknown engine {current_engine}, falling back to OpenAI")
-                success = await call_openai_api(self.client, output_path, self.model, self.voice, text)
-                voice_used = self.voice
+                logger.warning(f"Unknown engine {current_engine}, falling back to Kokoro")
+                success = await call_kokoro(output_path, KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
+                voice_used = OPENAI_TTS_VOICE
             
             # Get audio duration if file exists
             duration = None

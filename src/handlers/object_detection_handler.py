@@ -4,7 +4,7 @@ from typing import List
 
 from src.utils.logger import logger
 from src.helpers.gemini_helper import call_api
-from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTON, GEMINI_MODEL_NAME
+from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTION, GEMINI_MODEL_NAME
 from src.initializer import initializer
 from src.schemas.detection import DetectedObject
 
@@ -21,7 +21,6 @@ class ObjectDetectionHandler:
             model_name: Name of the model to use
         """
         self.gemini_client = initializer.get_gemini_client()
-        self.prompt = PROMPT_TEMPLATE
         self.model_name = model_name
         # Safety settings
         self.safety_settings = [
@@ -30,8 +29,6 @@ class ObjectDetectionHandler:
                 threshold=THRESHOLD,
             ),
         ]
-        # System instructions
-        self.system_instructions = SYSTEM_INSTRUCTON
         
     async def detect_objects(self, image_path: str) -> List[DetectedObject]:
         """
@@ -46,8 +43,8 @@ class ObjectDetectionHandler:
 
         return await call_api(
             self.gemini_client,
-            self.prompt,
-            self.system_instructions,
+            PROMPT_TEMPLATE,
+            SYSTEM_INSTRUCTION,
             self.safety_settings,
             self.model_name,
             image_path

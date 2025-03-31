@@ -10,16 +10,18 @@ from src.utils.logger import logger
 from src.helpers.video_helper import (
     extract_frames,
     validate_extension,
-    cleanup_file
+    cleanup_file,
+    parse_frame_range,
+    get_video_folders
 )
 from src.handlers.object_detection_handler import ObjectDetectionHandler
 from src.handlers.depth_estimation_handler import DepthEstimationHandler
 from src.handlers.navigation_guide_handler import NavigationGuideHandler
 from src.utils.constant import OUTPUT_FRAME_PATH, CONCURRENCY_LIMIT
 from src.handlers.text_to_speech_handler import TextToSpeechHandler
+from src.helpers.report_helper import save_execution_time_to_csv, save_video_analysis_to_csv
 from src.schemas.navigation import NavigationGuide
-from schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse
-from src.helpers.report_helper import save_execution_time_to_csv
+from schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse, VideoAnalysisResponse
 
 object_detector = ObjectDetectionHandler()
 depth_estimator = DepthEstimationHandler()
@@ -49,7 +51,9 @@ class VideoHandler:
             if not validate_extension(video_file.filename):
                 logger.error(f"Invalid file extension: {video_file.filename}")
                 raise Exception("Invalid file type")
-                
+            
+            logger.info(f"Processing video: {video_file.filename}")
+
             # Save uploaded file
             temp_path = self.output_path / video_file.filename
             async with aiofiles.open(temp_path, 'wb') as out_file:
@@ -59,6 +63,8 @@ class VideoHandler:
             frames_data = extract_frames(temp_path, self.output_path, time_interval=self.time_interval)
             if not frames_data:
                 raise Exception("Failed to process video")
+            
+            logger.info(f"Extracted {len(frames_data)} frames from video")
             
             # Cleanup video file after successful processing
             await cleanup_file(str(temp_path))
@@ -83,21 +89,7 @@ class VideoHandler:
     def get_video_folders() -> dict:
         """Get list of video folders for enum"""
         frames_base_path = os.path.abspath(OUTPUT_FRAME_PATH)
-        folders = {}
-        
-        if os.path.exists(frames_base_path):
-            for item in os.listdir(frames_base_path):
-                item_path = os.path.join(frames_base_path, item)
-                if os.path.isdir(item_path):
-                    frame_files = [f for f in os.listdir(item_path) if f.startswith('frame_')]
-                    if frame_files:
-                        folders[item] = item
-        
-        # If no folders found, add a placeholder
-        if not folders:
-            folders["no_videos_available"] = "no_videos_available"
-            
-        return folders
+        return get_video_folders(frames_base_path)
     
     async def process_frame(self, folder_name: str, frame_idx: int, frame_path: str, tts_engine: str) -> FrameAnalysis:
         """
@@ -179,14 +171,44 @@ class VideoHandler:
         
         return frame_analysis
     
-    async def process_video(self, folder_name: str, num_frames: int, tts_engine: str) -> List[AudioResponse]:
+    async def process_frames_string(self, folder_name: str, num_frames_str: str, tts_engine: str) -> List[AudioResponse]:
         """
-        Process video from a folder containing frames with parallel processing
-        but only return audio responses
+        Process video frames by parsing a frame range string
         
         Args:
             folder_name: Folder name containing frames
-            num_frames: Number of frames to process
+            num_frames_str: String representation of frame range (e.g., "5" or "3,7")
+            tts_engine: Text-to-speech engine to use
+            
+        Returns:
+            List[AudioResponse]: List of audio responses for each processed frame
+        """
+        try:
+            # Parse frame range
+            try:
+                start_frame, end_frame = parse_frame_range(num_frames_str)
+            except ValueError as e:
+                logger.error(f"Invalid frame range: {str(e)}")
+                return {"error": f"Invalid frame range: {str(e)}. Format should be a single number (e.g., '5') or a range (e.g., '3,7')."}
+            
+            logger.info(f"Parsed frame range: {start_frame} to {end_frame}")
+            
+            # Call the actual processing method
+            return await self.process_frames_range(folder_name, start_frame, end_frame, tts_engine)
+            
+        except Exception as e:
+            logger.error(f"Error processing frames: {str(e)}")
+            return {"error": str(e)}
+    
+    async def process_frames_range(self, folder_name: str, start_frame: int, end_frame: int, tts_engine: str) -> List[AudioResponse]:
+        """
+        Process video frames within a specific range with parallel processing
+        and return audio responses
+        
+        Args:
+            folder_name: Folder name containing frames
+            start_frame: Index of the first frame to process
+            end_frame: Index of the last frame to process
             tts_engine: Text-to-speech engine to use
             
         Returns:
@@ -207,8 +229,13 @@ class VideoHandler:
             frame_files = sorted([f for f in os.listdir(frames_folder) if f.startswith('frame_')])
             total_frames = len(frame_files)
             
+            # Validate frame range
+            if start_frame >= total_frames or end_frame >= total_frames:
+                logger.error(f"Invalid frame range: {start_frame} to {end_frame}. Total frames: {total_frames}")
+                return {"error": f"Invalid frame range: {start_frame} to {end_frame}. Total frames: {total_frames}"}
+            
             # Select frames to process
-            frame_indices = list(range(min(num_frames, total_frames)))
+            frame_indices = list(range(start_frame, min(end_frame + 1, total_frames)))
             
             # Process frames in parallel with concurrency control
             total_start_time = datetime.now()
@@ -220,6 +247,8 @@ class VideoHandler:
             # Collection for execution times
             execution_times = []
             
+            frames_analysis = []
+
             async def process_with_semaphore(idx):
                 try:
                     async with semaphore:
@@ -233,6 +262,7 @@ class VideoHandler:
                             
                         # Store execution time
                         execution_times.append(frame_analysis.execution_time)
+                        frames_analysis.append(frame_analysis)
                         
                         # Log the detailed analysis
                         logger.info(f"Frame {idx} analysis: Objects detected: {len(frame_analysis.objects)}")
@@ -256,14 +286,20 @@ class VideoHandler:
                 raise Exception("All frames failed to process")
 
             total_execution_time = (datetime.now() - total_start_time).total_seconds()
-            logger.info(f"Total processing time: {total_execution_time:.2f} seconds")
-            
-            # # Save execution time report
-            # report_path = save_execution_time_to_csv(execution_times, folder_name)
-            # logger.info(f"Execution time report saved to: {report_path}")
+            logger.info(f"Total processing time: {total_execution_time:.2f} seconds for frames {start_frame} to {end_frame}")
             
             # Filter out None values (in case some frames didn't generate audio)
             audio_responses = [audio for audio in audio_responses if audio is not None]
+
+            video_response = VideoAnalysisResponse(
+                video_path=frames_folder,
+                total_frames=total_frames,
+                frames_analysis=frames_analysis,
+            )
+
+            # # Save video analysis report to CSV
+            # report_path = save_video_analysis_to_csv(frames_analysis, folder_name)
+            # logger.info(f"Video analysis report saved to: {report_path}")
             
             return audio_responses
     

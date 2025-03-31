@@ -53,7 +53,7 @@ async def upload_video(
 )
 async def process_video(
     folder_name: VideoFolder = Query(..., description="Select a video folder"),
-    num_frames: int = Query(..., description="Number of frames to process"),
+    num_frames: str = Query(..., description="Frame range to process. Format: single number '5' (process from 0 to 5) or range '3,7' (process from 3 to 7)"),
     tts_engine: TTSEngine = Query(..., description="Text-to-speech engine to use")
 ) -> List[AudioResponse]:
     try:
@@ -67,10 +67,11 @@ async def process_video(
             
         # Get the string value from enum
         folder_name = folder_name.value
-        logger.info(f"Processing folder: {folder_name} with TTS engine: {tts_engine}")
+        logger.info(f"Processing folder: {folder_name} with frame range: {num_frames}, using TTS engine: {tts_engine}")
 
         # Process video frames and generate analysis with specified TTS engine
-        result = await video_handler.process_video(folder_name, num_frames, tts_engine)
+        # Pass the raw num_frames string to handler for parsing
+        result = await video_handler.process_frames_string(folder_name, num_frames, tts_engine)
         
         # Check for error
         if isinstance(result, dict) and "error" in result:

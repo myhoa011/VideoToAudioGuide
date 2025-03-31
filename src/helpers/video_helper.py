@@ -171,3 +171,57 @@ async def cleanup_file(file_path: str) -> bool:
     except Exception as e:
         logger.error(f"Error deleting file {file_path}: {str(e)}")
         return False
+
+def parse_frame_range(num_frames_str: str) -> tuple:
+    """
+    Parse a frame range string into start and end frame indices
+    
+    Args:
+        num_frames_str (str): String representation of frame range (e.g., "5" or "3,7")
+    
+    Returns:
+        tuple: (start_frame, end_frame) or raises ValueError if invalid
+    """
+    frame_parts = num_frames_str.strip().split(',')
+    if len(frame_parts) == 1:
+        # Single number - process from 0 to that number
+        start_frame = 0
+        end_frame = int(frame_parts[0])
+    elif len(frame_parts) == 2:
+        # Range - process from first to second number
+        start_frame = int(frame_parts[0])
+        end_frame = int(frame_parts[1])
+    else:
+        raise ValueError("Invalid frame range format")
+        
+    # Validate range
+    if start_frame < 0 or end_frame < start_frame:
+        raise ValueError("Invalid frame range values")
+        
+    return start_frame, end_frame
+    
+def get_video_folders(frames_base_path: str) -> dict:
+    """
+    Get list of video folders from the frames directory
+    
+    Args:
+        frames_base_path (str): Base path where frame folders are stored
+        
+    Returns:
+        dict: Dictionary of folder names
+    """
+    folders = {}
+    
+    if os.path.exists(frames_base_path):
+        for item in os.listdir(frames_base_path):
+            item_path = os.path.join(frames_base_path, item)
+            if os.path.isdir(item_path):
+                frame_files = [f for f in os.listdir(item_path) if f.startswith('frame_')]
+                if frame_files:
+                    folders[item] = item
+    
+    # If no folders found, add a placeholder
+    if not folders:
+        folders["no_videos_available"] = "no_videos_available"
+        
+    return folders

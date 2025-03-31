@@ -38,7 +38,7 @@ def sort_objects_by_priority(objects: List[ObjectWithDepth]) -> List[ObjectWithD
             obj_type = obj_type.lower()
             
             # High risk - highest priority
-            if obj_type in ['person', 'car', 'motorcycle', 'truck', 'bus']:
+            if obj_type in ['person', 'car', 'motorcycle', 'truck', 'bus', 'vehicle']:
                 return 1.0
                 
             # Medium risk

@@ -35,9 +35,10 @@ CATEGORY = "HARM_CATEGORY_DANGEROUS_CONTENT"
 THRESHOLD = "BLOCK_ONLY_HIGH"
 
 # Prompts
-SYSTEM_INSTRUCTON = """
+SYSTEM_INSTRUCTION = """
 You are an AI assistant specialized in detecting and identifying objects in images.
 Your task is to identify all visible objects in the image and provide their bounding boxes.
+Please return a maximum of 10 detected objects.
 """
 
 PROMPT_TEMPLATE = """Detect objects in the image. Return the output as a JSON list where each entry contains:

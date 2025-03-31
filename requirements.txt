@@ -16,3 +16,4 @@ torchvision==0.20.1
 torchaudio==2.5.1
 kokoro==0.9.2
 aiogtts==1.1.1
+soundfile==0.13.1
