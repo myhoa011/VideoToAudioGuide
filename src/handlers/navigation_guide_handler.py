@@ -1,11 +1,13 @@
-from typing import List
+from typing import List, Tuple
 
 from src.utils.logger import logger
 from schemas import NavigationGuide, ObjectWithDepth
 from src.helpers.navigation_helper import (
     sort_objects_by_priority,
-    generate_optimized_guidance
+    generate_optimized_guidance,
+    get_priority_score
 )
+from src.utils.constant import WARNING_HIGH_THRESHOLD, WARNING_MEDIUM_THRESHOLD, WARNING_THRESHOLD
 
 class NavigationGuideHandler:
     """Handler for creating navigation guidance from objects and depth information using Priority Score method"""
@@ -24,9 +26,9 @@ class NavigationGuideHandler:
         Returns:
             str: Warning level (High/Medium/None)
         """
-        if priority_score > 0.7:
-            return "High"
-        elif priority_score > 0.3:
+        if priority_score > WARNING_HIGH_THRESHOLD:
+            return "High" 
+        elif priority_score > WARNING_MEDIUM_THRESHOLD:
             return "Medium"
         else:
             return "None"
@@ -54,10 +56,36 @@ class NavigationGuideHandler:
             # Get the most important objects (maximum 3)
             important_objects = sorted_objects[:3]
             
-            # Generate optimized guidance text (one sentence)
-            navigation_text = generate_optimized_guidance(important_objects)
+            # Filter out objects below the minimum threshold
+            filtered_objects = []
+            warning_levels = []
             
-            priority_objects_dict = [obj.model_dump() for obj in important_objects]
+            for obj in important_objects:
+                # Calculate priority score for the object
+                p_score = get_priority_score(obj)
+                
+                # Skip objects with low priority score
+                if p_score <= WARNING_THRESHOLD:
+                    continue
+                
+                # Add object to filtered list
+                filtered_objects.append(obj)
+                
+                # Determine warning level
+                warning_level = self._get_warning_level(p_score)
+                warning_levels.append(warning_level)
+            
+            # Check if we have any important objects left
+            if not filtered_objects:
+                return NavigationGuide(
+                    navigation_text="No significant obstacles detected, proceed with caution.",
+                    priority_objects=[]
+                )
+            
+            # Generate optimized guidance text with warning level
+            navigation_text = generate_optimized_guidance(filtered_objects, warning_levels)
+            
+            priority_objects_dict = [obj.model_dump() for obj in filtered_objects]
 
             return NavigationGuide(
                 navigation_text=navigation_text,

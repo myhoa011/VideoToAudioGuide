@@ -1,13 +1,11 @@
-from pathlib import Path
-import os
-
 import wave
 import contextlib
+import io
 
 from src.utils.logger import logger
 from src.schemas.audio import AudioResponse
 from src.utils.constant import (
-    OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, OUTPUT_AUDIO_PATH,
+    OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, 
     TTS_ENGINE_OPENAI, TTS_ENGINE_GTTS, TTS_ENGINE_KOKORO,
     GTTS_LANGUAGE, KOKORO_VOICE, KOKORO_SPEED
 )
@@ -20,11 +18,9 @@ from src.initializer import initializer
 class TextToSpeechHandler:
     """Handler for text-to-speech conversion with multiple engine support"""
     
-    def __init__(self, output_path: str = OUTPUT_AUDIO_PATH, engine: str = TTS_ENGINE_KOKORO):
+    def __init__(self, engine: str = TTS_ENGINE_KOKORO):
         self.engine = engine
         self.client = initializer.get_openai_client()
-        self.base_output_path = Path(output_path)
-        self.base_output_path.mkdir(parents=True, exist_ok=True)
         
         # Get TTS engines from initializer
         self.kokoro_pipeline = initializer.get_kokoro_pipeline()
@@ -40,62 +36,55 @@ class TextToSpeechHandler:
     
     async def convert_text_to_speech(self, text: str, folder_name: str, frame_index: str, engine: str) -> AudioResponse:
         """
-        Convert text to speech using selected engine and save in folder structure
+        Convert text to speech using selected engine and return audio data
         
         Args:
             text: Text to convert
-            folder_name: Video folder name
-            frame_index: Frame index
+            folder_name: Video folder name (for logging)
+            frame_index: Frame index (for logging)
             engine: Override default engine (optional)
             
         Returns:
-            AudioResponse: Audio file information
+            AudioResponse: Audio response with audio_data
         """
         try:
             # Use provided engine or default
             current_engine = engine if engine else self.engine
             
-            # Create a folder for this video's audio files
-            video_audio_path = self.base_output_path / folder_name
-            video_audio_path.mkdir(parents=True, exist_ok=True)
-            
-            # Create audio filename
-            output_filename = f"audio_{frame_index}.wav"
-            output_path = video_audio_path / output_filename
-            
             logger.info(f"Converting text to speech using {current_engine} for {folder_name}, frame {frame_index}")
             
-            success = False
             voice_used = ""
+            audio_data = None
             
             # Call appropriate TTS API based on selected engine
             if current_engine == TTS_ENGINE_OPENAI:
-                success = await call_openai_api(self.client, output_path, OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, text)
+                audio_data = await call_openai_api(self.client, OPENAI_MODEL_NAME, OPENAI_TTS_VOICE, text)
                 voice_used = OPENAI_TTS_VOICE
             elif current_engine == TTS_ENGINE_GTTS:
-                success = await call_gtts(output_path, GTTS_LANGUAGE, text, self.aiogTTS_engine)
+                audio_data = await call_gtts(GTTS_LANGUAGE, text, self.aiogTTS_engine)
                 voice_used = f"aiogTTS ({GTTS_LANGUAGE})"
             elif current_engine == TTS_ENGINE_KOKORO:
-                success = await call_kokoro(output_path, KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
+                audio_data = await call_kokoro(KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
                 voice_used = KOKORO_VOICE
             else:
                 logger.warning(f"Unknown engine {current_engine}, falling back to Kokoro")
-                success = await call_kokoro(output_path, KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
-                voice_used = OPENAI_TTS_VOICE
+                audio_data = await call_kokoro(KOKORO_VOICE, KOKORO_SPEED, text, self.kokoro_pipeline)
+                voice_used = KOKORO_VOICE
             
-            # Get audio duration if file exists
+            # Get audio duration if possible
             duration = None
-            if output_path.exists():
+            if audio_data:
                 try:
-                    with contextlib.closing(wave.open(str(output_path), 'r')) as f:
+                    # Try to get duration from bytes
+                    with contextlib.closing(wave.open(io.BytesIO(audio_data), 'r')) as f:
                         frames = f.getnframes()
                         rate = f.getframerate()
                         duration = frames / float(rate)
                 except Exception as e:
-                    logger.warning(f"Could not get audio duration: {str(e)}")
+                    logger.warning(f"Could not get audio duration from bytes: {str(e)}")
             
             audio_response = AudioResponse(
-                audio_path=str(output_path),
+                audio_data=audio_data,
                 text=text,
                 duration=duration,
                 voice=voice_used,
@@ -109,7 +98,7 @@ class TextToSpeechHandler:
             logger.error(f"Error converting text to speech: {str(e)}")
             # Return minimal response in case of error
             return AudioResponse(
-                audio_path="",
+                audio_data=None,
                 text=text,
                 engine=engine if engine else self.engine,
                 voice="",

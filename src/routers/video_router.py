@@ -1,7 +1,9 @@
 import os
 from enum import Enum
-from fastapi import APIRouter, File, UploadFile, Form, Query, Response, status, HTTPException
+from fastapi import APIRouter, File, UploadFile, Query, Response, status, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from typing import List
+import io
 from src.handlers.video_handler import VideoHandler
 from src.utils.logger import logger
 from src.utils.constant import OUTPUT_FRAME_PATH, TIME_INTERVAL, TTS_ENGINES
@@ -48,14 +50,13 @@ async def upload_video(
 
 @router.post(
     "/process",
-    description="Process video frames and return only audio guidance",
-    response_model=List[AudioResponse]
+    description="Process a single video frame and return audio guidance directly as stream"
 )
 async def process_video(
     folder_name: VideoFolder = Query(..., description="Select a video folder"),
-    num_frames: str = Query(..., description="Frame range to process. Format: single number '5' (process from 0 to 5) or range '3,7' (process from 3 to 7)"),
+    frame_index: int = Query(..., description="Index of the frame to process"),
     tts_engine: TTSEngine = Query(..., description="Text-to-speech engine to use")
-) -> List[AudioResponse]:
+):
     try:
         tts_engine = tts_engine.value
         # Validate TTS engine
@@ -67,18 +68,36 @@ async def process_video(
             
         # Get the string value from enum
         folder_name = folder_name.value
-        logger.info(f"Processing folder: {folder_name} with frame range: {num_frames}, using TTS engine: {tts_engine}")
+        logger.info(f"Processing folder: {folder_name} with frame index: {frame_index}, using TTS engine: {tts_engine}")
 
-        # Process video frames and generate analysis with specified TTS engine
-        # Pass the raw num_frames string to handler for parsing
-        result = await video_handler.process_frames_string(folder_name, num_frames, tts_engine)
+        # Process single frame and get audio response
+        result = await video_handler.process_single_frame(folder_name, frame_index, tts_engine)
         
         # Check for error
         if isinstance(result, dict) and "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
-            
-        return result
+        
+        # Verify audio data is available
+        if not result.audio_data:
+            logger.error("No audio data generated")
+            raise HTTPException(status_code=500, detail="No audio data generated")
+        
+        # Create headers
+        headers = {
+            "X-Audio-Text": result.text,
+            "X-Audio-Duration": str(result.duration) if result.duration else "",
+            "X-Audio-Voice": result.voice if result.voice else "",
+            "X-Audio-Engine": result.engine if result.engine else "",
+            "X-Audio-Format": result.format if result.format else "wav",
+        }
+        
+        # Return StreamingResponse with audio bytes
+        return StreamingResponse(
+            io.BytesIO(result.audio_data),
+            media_type=f"audio/{result.format}",
+            headers=headers
+        )
         
     except Exception as e:
-        logger.error(f"Error processing video: {str(e)}")
+        logger.error(f"Error processing video frame: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

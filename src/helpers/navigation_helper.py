@@ -1,8 +1,84 @@
-from  typing import List
+from typing import List
 
 from src.utils.logger import logger
 from schemas import ObjectWithDepth
 from collections import defaultdict
+from src.utils.constant import (
+    PRIORITY_DEPTH_WEIGHT, PRIORITY_POSITION_WEIGHT, PRIORITY_SIZE_WEIGHT, PRIORITY_TYPE_WEIGHT,
+    DISTANCE_CLOSE_THRESHOLD, DISTANCE_MEDIUM_THRESHOLD,
+    FRAME_NORMALIZED_WIDTH, FRAME_NORMALIZED_AREA,
+    HIGH_RISK_OBJECTS, MEDIUM_RISK_OBJECTS, LOW_RISK_OBJECTS, MINIMAL_RISK_OBJECTS
+)
+
+def get_type_score(obj_type: str) -> float:
+    """Calculate priority score based on object type"""
+    obj_type = obj_type.lower()
+    
+    # High risk - highest priority
+    if obj_type in HIGH_RISK_OBJECTS:
+        return 1.0
+        
+    # Medium risk
+    if obj_type in MEDIUM_RISK_OBJECTS:
+        return 0.7
+        
+    # Low risk
+    if obj_type in LOW_RISK_OBJECTS:
+        return 0.4
+        
+    # Static objects, minimal risk
+    if obj_type in MINIMAL_RISK_OBJECTS:
+        return 0.2
+        
+    # Default for undefined objects
+    return 0.1
+
+def get_priority_score(obj: ObjectWithDepth) -> float:
+    """
+    Calculate priority score for an object
+    
+    Args:
+        obj (ObjectWithDepth): Object with depth information
+        
+    Returns:
+        float: Priority score (0-1)
+    """
+    try:
+        # Get depth score (already 0-1)
+        depth_score = obj.depth
+        
+        # Calculate position score
+        y_min, x_min, y_max, x_max = obj.box_2d
+        
+        # Calculate center point (by x)
+        x_center = (x_min + x_max) / 2
+        frame_width = FRAME_NORMALIZED_WIDTH
+        frame_center = frame_width / 2
+        position_score = abs(x_center - frame_center) / frame_width
+        
+        # Calculate size score
+        width = x_max - x_min
+        height = y_max - y_min
+        size_score = (width * height) / FRAME_NORMALIZED_AREA
+        
+        # Calculate type score
+        type_score = get_type_score(obj.type)
+        
+        # Define weights
+        w1 = PRIORITY_DEPTH_WEIGHT
+        w2 = PRIORITY_POSITION_WEIGHT
+        w3 = PRIORITY_SIZE_WEIGHT
+        w4 = PRIORITY_TYPE_WEIGHT
+        
+        # Calculate priority score
+        priority_score = (w1 * depth_score) + (w2 * (1 - position_score)) + \
+                       (w3 * size_score) + (w4 * type_score)
+        
+        return priority_score
+        
+    except Exception as e:
+        logger.error(f"Error calculating priority score: {str(e)}")
+        return 0.0
 
 def sort_objects_by_priority(objects: List[ObjectWithDepth]) -> List[ObjectWithDepth]:
     """
@@ -27,67 +103,6 @@ def sort_objects_by_priority(objects: List[ObjectWithDepth]) -> List[ObjectWithD
         List[ObjectWithDepth]: Sorted list of objects
     """
     try:
-        # Define weights
-        w1 = 0.5  # depth weight
-        w2 = 0.2  # position weight
-        w3 = 0.1  # size weight
-        w4 = 0.2  # type weight
-        
-        def get_type_score(obj_type: str) -> float:
-            """Calculate priority score based on object type"""
-            obj_type = obj_type.lower()
-            
-            # High risk - highest priority
-            if obj_type in ['person', 'car', 'motorcycle', 'truck', 'bus', 'vehicle']:
-                return 1.0
-                
-            # Medium risk
-            if obj_type in ['bicycle', 'dog', 'pothole', 'stairs']:
-                return 0.7
-                
-            # Low risk
-            if obj_type in ['traffic_light', 'stop_sign', 'door']:
-                return 0.4
-                
-            # Static objects, minimal risk
-            if obj_type in ['bench', 'wall', 'tree']:
-                return 0.2
-                
-            # Default for undefined objects
-            return 0.1
-        
-        def get_priority_score(obj: ObjectWithDepth) -> float:
-            try:
-                # Get depth score (already 0-1)
-                depth_score = obj.depth
-                
-                # Calculate position score
-                y_min, x_min, y_max, x_max = obj.box_2d
-                
-                # Calculate center point (by x)
-                x_center = (x_min + x_max) / 2
-                frame_width = 1000.0  # normalized width (0-1000)
-                frame_center = frame_width / 2
-                position_score = abs(x_center - frame_center) / frame_width
-                
-                # Calculate size score
-                width = x_max - x_min
-                height = y_max - y_min
-                size_score = (width * height) / (frame_width * frame_width)  # normalized by frame area
-                
-                # Calculate type score
-                type_score = get_type_score(obj.type)
-                
-                # Calculate priority score
-                priority_score = (w1 * depth_score) + (w2 * (1 - position_score)) + \
-                               (w3 * size_score) + (w4 * type_score)
-                
-                return priority_score
-                
-            except Exception as e:
-                logger.error(f"Error calculating priority score: {str(e)}")
-                return 0.0
-        
         # Sort objects by priority score in descending order
         sorted_objects = sorted(objects, key=get_priority_score, reverse=True)
         
@@ -107,19 +122,33 @@ def convert_depth_to_distance_text(depth: float) -> str:
     Returns:
         str: Distance description
     """
-    if depth > 0.7:  # Strong warning threshold
+    if depth > DISTANCE_CLOSE_THRESHOLD:
         return "very close"
-    elif depth > 0.3:  # Mild warning threshold
+    elif depth > DISTANCE_MEDIUM_THRESHOLD:
         return "quite close"
-    else:  # No warning needed
+    else:
         return "far away"
 
-def generate_optimized_guidance(important_objects: List[ObjectWithDepth]) -> str:
+def should_add_warning(warning_levels: List[str]) -> bool:
+    """
+    Determine if warning prefix should be added based on warning levels
+    
+    Args:
+        warning_levels (List[str]): List of warning levels for objects
+        
+    Returns:
+        bool: True if warning should be added
+    """
+    # Add warning if any object has "High" warning level
+    return "High" in warning_levels
+
+def generate_optimized_guidance(important_objects: List[ObjectWithDepth], warning_levels: List[str]) -> str:
     """
     Generate optimized guidance text by combining all objects into a single concise sentence
     
     Args:
         important_objects (List[ObjectWithDepth]): List of priority objects
+        warning_levels (List[str]): Warning levels for each object
         
     Returns:
         str: Optimized guidance text as a single sentence
@@ -130,7 +159,6 @@ def generate_optimized_guidance(important_objects: List[ObjectWithDepth]) -> str
     # Group objects by position and label
     position_objects = defaultdict(lambda: defaultdict(int))
     position_depth = defaultdict(lambda: defaultdict(list))
-    has_close_objects = False
     
     for obj in important_objects:
         label = obj.label
@@ -141,16 +169,12 @@ def generate_optimized_guidance(important_objects: List[ObjectWithDepth]) -> str
         position_objects[position][label] += 1
         # Track depths for each object type at each position
         position_depth[position][label].append(depth)
-        
-        # Check if we have close objects
-        if depth > 0.5:
-            has_close_objects = True
     
     # Start building the sentence
     sentence_parts = []
     
-    # Add warning prefix if needed
-    if has_close_objects:
+    # Add warning prefix based on warning levels 
+    if should_add_warning(warning_levels):
         sentence_parts.append("Warning!")
     
     # Process each position (center, left, right)

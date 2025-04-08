@@ -300,9 +300,63 @@ class VideoHandler:
             # # Save video analysis report to CSV
             # report_path = save_video_analysis_to_csv(frames_analysis, folder_name)
             # logger.info(f"Video analysis report saved to: {report_path}")
-            
+            report_path = save_execution_time_to_csv(execution_times, folder_name)
+            logger.info(f"Execution time report saved to: {report_path}")
             return audio_responses
     
         except Exception as e:
             logger.error(f"Error processing frames: {str(e)}")
+            return {"error": str(e)}
+
+    async def process_single_frame(self, folder_name: str, frame_index: int, tts_engine: str) -> AudioResponse:
+        """
+        Process a single video frame and return audio response
+        
+        Args:
+            folder_name: Folder name containing frames
+            frame_index: Index of the frame to process
+            tts_engine: Text-to-speech engine to use
+            
+        Returns:
+            AudioResponse: Audio response with audio_data
+        """
+        try:
+            if folder_name == "no_videos_available":
+                logger.error("No videos available. Please upload a video first.")
+                return {"error": "No videos available. Please upload a video first."}
+                
+            frames_folder = os.path.join(os.path.abspath(self.output_path), folder_name)
+            
+            if not os.path.exists(frames_folder):
+                logger.error(f"Folder '{folder_name}' not found")
+                return {"error": f"Folder '{folder_name}' not found"}
+    
+            # Get frames in folder
+            frame_files = sorted([f for f in os.listdir(frames_folder) if f.startswith('frame_')])
+            total_frames = len(frame_files)
+            
+            # Validate frame index
+            if frame_index < 0 or frame_index >= total_frames:
+                logger.error(f"Invalid frame index: {frame_index}. Total frames: {total_frames}")
+                return {"error": f"Invalid frame index: {frame_index}. Total frames: {total_frames}"}
+            
+            # Get frame path
+            frame_path = os.path.join(frames_folder, frame_files[frame_index])
+            
+            # Process the frame
+            logger.info(f"Processing single frame at index {frame_index}: {frame_path}")
+            frame_analysis = await self.process_frame(folder_name, frame_index, frame_path, tts_engine)
+            
+            if frame_analysis is None or frame_analysis.audio is None:
+                logger.error(f"Frame {frame_index} processing failed")
+                return {"error": f"Frame {frame_index} processing failed"}
+            
+            # Get the audio response
+            audio_response = frame_analysis.audio
+            
+            # Skip file existence check since we're streaming directly
+            return audio_response
+            
+        except Exception as e:
+            logger.error(f"Error processing single frame: {str(e)}")
             return {"error": str(e)}

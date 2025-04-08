@@ -8,6 +8,7 @@ sys.path.append(".")
 
 from src.utils.logger import logger
 from src.routers import video_router
+from src.utils.constant import DEFAULT_HOST, DEFAULT_PORT
 
 
 @asynccontextmanager
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "src.app:app",
-        host="0.0.0.0",
-        port=8000,
+        host=DEFAULT_HOST,
+        port=DEFAULT_PORT,
         reload=True
     )

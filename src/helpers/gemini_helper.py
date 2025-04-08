@@ -6,6 +6,7 @@ import asyncio
 from typing import List
 from src.utils.logger import logger
 from schemas import DetectedObject
+from src.utils.constant import GEMINI_TEMPERATURE
 
 async def call_api(gemini_client, prompt, system_instructions, safety_settings, model_name, img_path: str) -> List[DetectedObject]:
     """
@@ -35,7 +36,7 @@ async def call_api(gemini_client, prompt, system_instructions, safety_settings, 
             contents=[prompt, img],
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
-                temperature=0,
+                temperature=GEMINI_TEMPERATURE,
                 safety_settings=safety_settings,
                 response_mime_type="application/json",
                 response_schema=list[DetectedObject]

@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 class AudioResponse(BaseModel):
-    audio_path: str
+    audio_data: Optional[bytes] = None
     text: str
     duration: Optional[float] = None
     voice: Optional[str] = None
