@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 from src.utils.logger import logger
-from schemas import NavigationGuide, ObjectWithDepth
+from src.schemas import NavigationGuide, ObjectWithDepth
 from src.helpers.navigation_helper import (
     sort_objects_by_priority,
     generate_optimized_guidance,

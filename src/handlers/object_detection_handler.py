@@ -1,10 +1,9 @@
-
 from google.genai import types
 from typing import List
 
 from src.utils.logger import logger
 from src.helpers.gemini_helper import call_api
-from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTION, GEMINI_MODEL_NAME
+from src.utils.constant import PROMPT_TEMPLATE, CATEGORY, THRESHOLD, SYSTEM_INSTRUCTION, GEMINI_MODEL_NAME, EXCLUDED_OBJECTS
 from src.initializer import initializer
 from src.schemas.detection import DetectedObject
 
@@ -41,7 +40,7 @@ class ObjectDetectionHandler:
             list: Detected objects with bounding boxes
         """
 
-        return await call_api(
+        objects = await call_api(
             self.gemini_client,
             PROMPT_TEMPLATE,
             SYSTEM_INSTRUCTION,
@@ -49,4 +48,7 @@ class ObjectDetectionHandler:
             self.model_name,
             image_path
         )
+
+        filtered_objects = [obj for obj in objects if obj.label not in EXCLUDED_OBJECTS and obj.type not in ['geographical feature', 'atmospheric', 'body of water', 'surface']]
+        return filtered_objects
 

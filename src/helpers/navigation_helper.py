@@ -1,7 +1,7 @@
 from typing import List
 
 from src.utils.logger import logger
-from schemas import ObjectWithDepth
+from src.schemas import ObjectWithDepth
 from collections import defaultdict
 from src.utils.constant import (
     PRIORITY_DEPTH_WEIGHT, PRIORITY_POSITION_WEIGHT, PRIORITY_SIZE_WEIGHT, PRIORITY_TYPE_WEIGHT,
@@ -13,6 +13,10 @@ from src.utils.constant import (
 def get_type_score(obj_type: str) -> float:
     """Calculate priority score based on object type"""
     obj_type = obj_type.lower()
+    
+    # Không ưu tiên các đối tượng không liên quan đến điều hướng
+    if obj_type in ['geographical feature', 'atmospheric', 'body of water']:
+        return 0.0
     
     # High risk - highest priority
     if obj_type in HIGH_RISK_OBJECTS:

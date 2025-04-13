@@ -5,7 +5,7 @@ import asyncio
 import os
 from src.utils.logger import logger
 from src.utils.constant import ALLOWED_EXTENSIONS
-from schemas import VideoFrame
+from src.schemas import VideoFrame
 
 def extract_frames(video_path, output_path, time_interval) -> list:
     """

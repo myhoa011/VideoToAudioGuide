@@ -21,7 +21,7 @@ from src.utils.constant import OUTPUT_FRAME_PATH, CONCURRENCY_LIMIT
 from src.handlers.text_to_speech_handler import TextToSpeechHandler
 from src.helpers.report_helper import save_execution_time_to_csv, save_video_analysis_to_csv
 from src.schemas.navigation import NavigationGuide
-from schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse, VideoAnalysisResponse
+from src.schemas import ExecutionTime, FrameAnalysis, VideoProcessingResult, AudioResponse, VideoAnalysisResponse
 
 object_detector = ObjectDetectionHandler()
 depth_estimator = DepthEstimationHandler()
@@ -131,29 +131,30 @@ class VideoHandler:
             navigation_guide_obj = await navigation_guide.generate_navigation_guide(objects_with_depth)
             navigation_time = (datetime.now() - navigation_start).total_seconds()
             execution_time.navigation_generation = navigation_time
-            
-            # Perform text-to-speech
-            tts_start = datetime.now()
-            audio_data = await tts_handler.convert_text_to_speech(
-                navigation_guide_obj.navigation_text,
-                folder_name,
-                str(frame_idx),
-                tts_engine
-            )
-            tts_time = (datetime.now() - tts_start).total_seconds()
-            execution_time.text_to_speech = tts_time
         else:
             # Create default NavigationGuide object if no objects detected
             navigation_guide_obj = NavigationGuide(
                 navigation_text="No objects detected, the path ahead is clear.",
                 priority_objects=[]
             )
+            execution_time.navigation_generation = 0.0
+        
+        # Perform text-to-speech
+        tts_start = datetime.now()
+        audio_data = await tts_handler.convert_text_to_speech(
+            navigation_guide_obj.navigation_text,
+            folder_name,
+            str(frame_idx),
+            tts_engine
+        )
+        tts_time = (datetime.now() - tts_start).total_seconds()
+        execution_time.text_to_speech = tts_time
         
         # Calculate total processing time
         execution_time.total = sum([
             execution_time.object_detection,
-            execution_time.depth_estimation,
-            execution_time.navigation_generation,
+            execution_time.depth_estimation or 0.0,
+            execution_time.navigation_generation or 0.0,
             execution_time.text_to_speech
         ])
         
